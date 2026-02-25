@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ChatGPT to Word Document Builder</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Lexend:wght@400;700&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Lexend',sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:24px}
+h1{font-size:1.6rem;color:#93c5fd;margin-bottom:4px;text-align:center}
+.subtitle{color:#64748b;font-size:.85rem;margin-bottom:20px;text-align:center}
+.container{width:100%;max-width:800px;display:flex;flex-direction:column;gap:16px}
+label{font-size:.85rem;color:#94a3b8;font-weight:700}
+textarea{width:100%;min-height:340px;background:#1e293b;border:1px solid #334155;border-radius:10px;color:#e2e8f0;font-family:'Lexend',sans-serif;font-size:.9rem;padding:14px;resize:vertical;outline:none;transition:border .2s}
+textarea:focus{border-color:#3b82f6}
+.title-row{display:flex;gap:10px;align-items:center}
+.title-row input{flex:1;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-family:'Lexend',sans-serif;font-size:.9rem;padding:10px 14px;outline:none;transition:border .2s}
+.title-row input:focus{border-color:#3b82f6}
+.auto-badge{font-size:.7rem;color:#3b82f6;background:#1e3a5f;padding:3px 8px;border-radius:4px;white-space:nowrap}
+.ai-badge{font-size:.7rem;color:#a78bfa;background:#2e1065;padding:3px 8px;border-radius:4px;white-space:nowrap;display:none}
+button{padding:14px 28px;font-family:'Lexend',sans-serif;font-size:1rem;font-weight:700;border:none;border-radius:10px;cursor:pointer;transition:all .2s}
+.btn-primary{background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;width:100%}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 4px 20px rgba(59,130,246,.4)}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none}
+.status{text-align:center;font-size:.85rem;min-height:1.2em}
+.status.ok{color:#4ade80}
+.status.err{color:#f87171}
+.status.loading{color:#facc15}
+.preview{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:14px;font-size:.8rem;color:#94a3b8;max-height:160px;overflow-y:auto;line-height:1.5}
+.preview b{color:#93c5fd}
+.preview .h1{color:#60a5fa;font-weight:700;font-size:.95rem}
+.preview .h2{color:#60a5fa;font-weight:700;font-size:.88rem;padding-left:6px}
+.preview .bullet{padding-left:20px}
+</style>
+</head>
+<body>
+<h1>ChatGPT → Word Document</h1>
+<p class="subtitle">Paste ChatGPT output below. Markdown headings & bullets are auto-detected.</p>
+<div class="container">
+  <div>
+    <div class="title-row" style="margin-bottom:6px">
+      <label>Document Title (header)</label>
+      <span class="auto-badge" id="autoBadge">auto-detected</span>
+      <span class="ai-badge" id="aiBadge">✨ AI-generated</span>
+    </div>
+    <div class="title-row">
+      <input type="text" id="titleInput" placeholder="Auto-generated from content…">
+    </div>
+  </div>
+  <div>
+    <label>Paste ChatGPT Text</label>
+    <textarea id="textInput" placeholder="Paste your ChatGPT output here…"></textarea>
+  </div>
+  <div id="previewBox" class="preview" style="display:none"></div>
+  <div id="downloadLink" style="display:none;text-align:center;padding:12px;background:#1e293b;border:1px solid #334155;border-radius:10px"></div>
+  <button class="btn-primary" id="buildBtn" disabled>Generate .docx</button>
+  <div class="status" id="status"></div>
+</div>
+
+<script>
+const textArea=document.getElementById('textInput');
+const titleInput=document.getElementById('titleInput');
+const buildBtn=document.getElementById('buildBtn');
+const statusEl=document.getElementById('status');
+const previewBox=document.getElementById('previewBox');
+const autoBadge=document.getElementById('autoBadge');
+const aiBadge=document.getElementById('aiBadge');
+const downloadLink=document.getElementById('downloadLink');
+let autoTitle='';
+let aiTitlePending=false;
+let debounceTimer=null;
+
+textArea.addEventListener('input',()=>{
+  const v=textArea.value.trim();
+  buildBtn.disabled=!v;
+  downloadLink.style.display='none';
+  if(v){
+    parseAndPreview(v);
+    clearTimeout(debounceTimer);
+    debounceTimer=setTimeout(()=>maybeFetchAITitle(v),800);
+  }else{
+    previewBox.style.display='none';
+    autoTitle='';
+    aiBadge.style.display='none';
+    autoBadge.style.display='inline';
+  }
+});
+
+const WEAK_TITLES=new Set([
+  'enhanced answer','answer','response','summary','overview','introduction',
+  'details','information','notes','characteristics','description','context',
+  'background','result','results','output','text','content','update','reply',
+  'explanation','analysis','recommendation','recommendations','conclusion'
+]);
+
+function isWeakTitle(t){
+  if(!t)return true;
+  const lower=t.toLowerCase().trim();
+  if(lower.length<3)return true;
+  if(lower.length>80)return true;
+  if(WEAK_TITLES.has(lower))return true;
+  if(!lower.includes(' ')&&lower.length<12)return true;
+  return false;
+}
+
+async function maybeFetchAITitle(raw){
+  const blocks=parseParagraphs(raw);
+  const firstHeading=blocks.find(b=>b.type==='h1'||b.type==='h2');
+  const headingText=firstHeading?firstHeading.text:'';
+  if(titleInput.value.trim())return;
+  if(headingText&&!isWeakTitle(headingText)){
+    autoTitle=headingText;
+    titleInput.value=headingText;
+    aiBadge.style.display='none';
+    autoBadge.style.display='inline';
+    return;
+  }
+  aiTitlePending=true;
+  aiBadge.style.display='inline';
+  aiBadge.textContent='⏳ generating title…';
+  autoBadge.style.display='none';
+  try{
+    const snippet=raw.substring(0,2000);
+    const resp=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:60,
+        messages:[{role:'user',content:`You are a document title generator. Read this text and generate a short, descriptive document title (max 8 words). Output ONLY the title text, nothing else. No quotes, no punctuation at the end.\n\nText:\n${snippet}`}]
+      })
+    });
+    const data=await resp.json();
+    const aiTitle=(data.content&&data.content[0]&&data.content[0].text)||'';
+    const cleaned=aiTitle.trim().replace(/^["']|["']$/g,'').replace(/\.$/,'');
+    if(cleaned&&!titleInput.value.trim()){
+      titleInput.value=cleaned;
+      autoTitle=cleaned;
+      aiBadge.textContent='✨ AI-generated';
+      aiBadge.style.display='inline';
+    }
+  }catch(e){
+    console.error('AI title error:',e);
+    if(!titleInput.value.trim()){
+      const fb=cleanInline(raw).substring(0,60);
+      titleInput.value=fb;
+      autoTitle=fb;
+      aiBadge.style.display='none';
+      autoBadge.style.display='inline';
+    }
+  }
+  aiTitlePending=false;
+}
+
+function cleanInline(s){
+  s=s.replace(/\*\*\*(.+?)\*\*\*/g,'$1');
+  s=s.replace(/\*\*(.+?)\*\*/g,'$1');
+  s=s.replace(/\*(.+?)\*/g,'$1');
+  s=s.replace(/__(.+?)__/g,'$1');
+  s=s.replace(/_(.+?)_/g,'$1');
+  s=s.replace(/`(.+?)`/g,'$1');
+  s=s.replace(/```/g,'');
+  return s.trim();
+}
+
+function parseInlineRuns(s){
+  s=s.replace(/\*\*\*(.+?)\*\*\*/g,'**$1**');
+  const runs=[];
+  const re=/\*\*(.+?)\*\*/g;
+  let last=0,m;
+  while((m=re.exec(s))!==null){
+    if(m.index>last){const b=s.substring(last,m.index).replace(/[*_`]/g,'');if(b)runs.push({t:b,b:false})}
+    runs.push({t:m[1],b:true});
+    last=re.lastIndex;
+  }
+  if(last<s.length){const r=s.substring(last).replace(/[*_`]/g,'');if(r)runs.push({t:r,b:false})}
+  if(!runs.length)runs.push({t:cleanInline(s),b:false});
+  return runs;
+}
+
+function parseParagraphs(raw){
+  let t=raw.replace(/\r\n/g,'\n').replace(/\r/g,'\n').replace(/\n{3,}/g,'\n\n');
+  const lines=t.split('\n');
+  const blocks=[];
+  autoTitle='';
+  let i=0;
+  while(i<lines.length){
+    const tr=lines[i].trim();
+    if(!tr){i++;continue}
+    const hM=tr.match(/^(#{1,6})\s+(.*)/);
+    if(hM){const lv=hM[1].length;const tx=cleanInline(hM[2]);blocks.push({type:lv<=1?'h1':'h2',text:tx,raw:hM[2]});if(!autoTitle)autoTitle=tx;i++;continue}
+    const bL=tr.match(/^\*\*(.+?)\*\*$/);
+    if(bL&&tr.length<120){const tx=cleanInline(bL[1]);blocks.push({type:'h2',text:tx,raw:bL[1]});if(!autoTitle)autoTitle=tx;i++;continue}
+    const buM=tr.match(/^[-*•]\s+(.*)/);
+    if(buM){blocks.push({type:'bullet',text:cleanInline(buM[1]),raw:buM[1]});i++;continue}
+    const nM=tr.match(/^\d+[\.\)]\s+(.*)/);
+    if(nM){blocks.push({type:'bullet',text:cleanInline(nM[1]),raw:nM[1]});i++;continue}
+    let para=tr,rp=tr;i++;
+    while(i<lines.length&&lines[i].trim()&&!lines[i].trim().match(/^(#{1,6}\s|[-*•]\s|\d+[\.\)]\s|\*\*.+\*\*$)/)){para+=' '+lines[i].trim();rp+=' '+lines[i].trim();i++}
+    blocks.push({type:'body',text:cleanInline(para),raw:rp});
+    if(!autoTitle){autoTitle=cleanInline(para).substring(0,60);if(para.length>60)autoTitle+='…'}
+  }
+  return blocks;
+}
+
+function parseAndPreview(raw){
+  const blocks=parseParagraphs(raw);
+  let html='<b>Structure Preview:</b><br>';
+  blocks.forEach(b=>{
+    if(b.type==='h1')html+=`<div class="h1">H1: ${esc(b.text)}</div>`;
+    else if(b.type==='h2')html+=`<div class="h2">H2: ${esc(b.text)}</div>`;
+    else if(b.type==='bullet')html+=`<div class="bullet">• ${esc(b.text.substring(0,80))}${b.text.length>80?'…':''}</div>`;
+    else html+=`<div>${esc(b.text.substring(0,90))}${b.text.length>90?'…':''}</div>`;
+  });
+  previewBox.innerHTML=html;
+  previewBox.style.display='block';
+}
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+function xmlEsc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+const TWIP_INCH=1440;
+const hp=pt=>pt*2;
+const tw=pt=>pt*20;
+const BLUE='204C8D';
+const MARGIN=Math.round(TWIP_INCH*0.5);
+const HDR_DIST=Math.round(TWIP_INCH*0.2);
+const FTR_DIST=Math.round(TWIP_INCH*0.2);
+
+function makeRuns(runs,sz,color,bold){
+  return runs.map(r=>{
+    const b=r.b||bold;
+    return `<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="${sz}"/><w:szCs w:val="${sz}"/><w:color w:val="${color}"/>${b?'<w:b/><w:bCs/>':''}</w:rPr><w:t xml:space="preserve">${xmlEsc(r.t)}</w:t></w:r>`;
+  }).join('');
+}
+
+function makeBody(blocks){
+  let xml='';
+  blocks.forEach(b=>{
+    if(b.type==='h1'){
+      xml+=`<w:p><w:pPr><w:pStyle w:val="Heading1"/><w:spacing w:before="0" w:after="${tw(12)}" w:line="240" w:lineRule="auto"/><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/><w:sz w:val="${hp(14)}"/><w:szCs w:val="${hp(14)}"/><w:color w:val="${BLUE}"/></w:rPr></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/><w:sz w:val="${hp(14)}"/><w:szCs w:val="${hp(14)}"/><w:color w:val="${BLUE}"/></w:rPr><w:t xml:space="preserve">${xmlEsc(b.text)}</w:t></w:r></w:p>`;
+    }else if(b.type==='h2'){
+      xml+=`<w:p><w:pPr><w:pStyle w:val="Heading2"/><w:spacing w:before="0" w:after="${tw(12)}" w:line="240" w:lineRule="auto"/><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/><w:sz w:val="${hp(13)}"/><w:szCs w:val="${hp(13)}"/><w:color w:val="${BLUE}"/></w:rPr></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/><w:sz w:val="${hp(13)}"/><w:szCs w:val="${hp(13)}"/><w:color w:val="${BLUE}"/></w:rPr><w:t xml:space="preserve">${xmlEsc(b.text)}</w:t></w:r></w:p>`;
+    }else if(b.type==='bullet'){
+      const runs=parseInlineRuns(b.raw);
+      const runsXml=makeRuns(runs,hp(13),'000000',false);
+      xml+=`<w:p><w:pPr><w:pStyle w:val="ListBullet"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr><w:spacing w:before="0" w:after="${tw(6)}" w:line="240" w:lineRule="auto"/></w:pPr>${runsXml}</w:p>`;
+    }else{
+      const runs=parseInlineRuns(b.raw);
+      const runsXml=makeRuns(runs,hp(13),'000000',false);
+      xml+=`<w:p><w:pPr><w:spacing w:before="0" w:after="${tw(6)}" w:line="240" w:lineRule="auto"/></w:pPr>${runsXml}</w:p>`;
+    }
+  });
+  return xml;
+}
+
+function buildDocx(title,blocks){
+  const zip=new JSZip();
+  zip.file('[Content_Types].xml',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/><Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/><Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/></Types>`);
+  zip.file('_rels/.rels',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/></Relationships>`);
+  zip.file('docProps/core.xml',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>${xmlEsc(title)}</dc:title><dcterms:created xsi:type="dcterms:W3CDTF">${new Date().toISOString()}</dcterms:created></cp:coreProperties>`);
+  zip.file('word/_rels/document.xml.rels',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/><Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/></Relationships>`);
+  zip.file('word/styles.xml',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="${hp(13)}"/><w:szCs w:val="${hp(13)}"/><w:color w:val="000000"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:before="0" w:after="${tw(6)}" w:line="240" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:pPr><w:spacing w:before="0" w:after="${tw(12)}"/></w:pPr><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/><w:sz w:val="${hp(14)}"/><w:szCs w:val="${hp(14)}"/><w:color w:val="${BLUE}"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:pPr><w:spacing w:before="0" w:after="${tw(12)}"/></w:pPr><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/><w:sz w:val="${hp(13)}"/><w:szCs w:val="${hp(13)}"/><w:color w:val="${BLUE}"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="ListBullet"><w:name w:val="List Bullet"/><w:pPr><w:spacing w:before="0" w:after="${tw(6)}"/></w:pPr><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="${hp(13)}"/><w:szCs w:val="${hp(13)}"/></w:rPr></w:style></w:styles>`);
+  zip.file('word/numbering.xml',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="\u2022"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr><w:rPr><w:rFonts w:ascii="Symbol" w:hAnsi="Symbol" w:hint="default"/></w:rPr></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num></w:numbering>`);
+  zip.file('word/header1.xml',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:pPr><w:jc w:val="center"/><w:spacing w:after="0" w:line="240" w:lineRule="auto"/><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="${hp(16)}"/><w:szCs w:val="${hp(16)}"/><w:color w:val="${BLUE}"/></w:rPr></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="${hp(16)}"/><w:szCs w:val="${hp(16)}"/><w:color w:val="${BLUE}"/></w:rPr><w:t xml:space="preserve">${xmlEsc(title)}</w:t></w:r></w:p><w:p><w:pPr><w:spacing w:after="${tw(6)}" w:line="240" w:lineRule="auto"/><w:rPr><w:sz w:val="${hp(1)}"/><w:szCs w:val="${hp(1)}"/></w:rPr></w:pPr></w:p></w:hdr>`);
+  zip.file('word/footer1.xml',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="${hp(10)}"/><w:szCs w:val="${hp(10)}"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="${hp(10)}"/><w:szCs w:val="${hp(10)}"/></w:rPr><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="${hp(10)}"/><w:szCs w:val="${hp(10)}"/></w:rPr><w:fldChar w:fldCharType="end"/></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="${hp(10)}"/><w:szCs w:val="${hp(10)}"/></w:rPr><w:t xml:space="preserve"> of </w:t></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="${hp(10)}"/><w:szCs w:val="${hp(10)}"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="${hp(10)}"/><w:szCs w:val="${hp(10)}"/></w:rPr><w:instrText xml:space="preserve"> NUMPAGES </w:instrText></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="${hp(10)}"/><w:szCs w:val="${hp(10)}"/></w:rPr><w:fldChar w:fldCharType="end"/></w:r></w:p></w:ftr>`);
+  const bodyXml=makeBody(blocks);
+  zip.file('word/document.xml',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${bodyXml}<w:sectPr><w:headerReference w:type="default" r:id="rId3"/><w:footerReference w:type="default" r:id="rId4"/><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="${MARGIN}" w:right="${MARGIN}" w:bottom="${MARGIN}" w:left="${MARGIN}" w:header="${HDR_DIST}" w:footer="${FTR_DIST}"/></w:sectPr></w:body></w:document>`);
+  return zip.generateAsync({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+}
+
+buildBtn.addEventListener('click',async()=>{
+  statusEl.className='status loading';statusEl.textContent='Building document…';
+  downloadLink.style.display='none';
+  const raw=textArea.value.trim();
+  if(!raw)return;
+  if(aiTitlePending){
+    statusEl.textContent='Waiting for AI title…';
+    await new Promise(r=>setTimeout(r,3000));
+  }
+  const blocks=parseParagraphs(raw);
+  const title=titleInput.value.trim()||autoTitle||'Document';
+  try{
+    const blob=await buildDocx(title,blocks);
+    const fn=title.replace(/[^a-zA-Z0-9 ]/g,'').replace(/\s+/g,'_').substring(0,50)+'.docx';
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;a.download=fn;a.click();
+    URL.revokeObjectURL(url);
+    statusEl.className='status ok';statusEl.textContent='✓ Downloaded: '+fn;
+  }catch(e){
+    statusEl.className='status err';statusEl.textContent='Error: '+e.message;
+    console.error(e);
+  }
+});
+</script>
+</body>
+</html>
