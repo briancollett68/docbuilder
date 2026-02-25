@@ -85,7 +85,7 @@ textArea.addEventListener('input',()=>{
   if(v){
     parseAndPreview(v);
     clearTimeout(debounceTimer);
-    debounceTimer=setTimeout(()=>maybeFetchAITitle(v),800);
+    debounceTimer=setTimeout(()=>generateSmartTitle(v),800);
   }else{
     previewBox.style.display='none';
     autoTitle='';
@@ -111,53 +111,66 @@ function isWeakTitle(t){
   return false;
 }
 
-async function maybeFetchAITitle(raw){
+function generateSmartTitle(raw){
   const blocks=parseParagraphs(raw);
-  const firstHeading=blocks.find(b=>b.type==='h1'||b.type==='h2');
-  const headingText=firstHeading?firstHeading.text:'';
   if(titleInput.value.trim())return;
-  if(headingText&&!isWeakTitle(headingText)){
-    autoTitle=headingText.substring(0,30);
+
+  // Collect all headings
+  const headings=blocks.filter(b=>b.type==='h1'||b.type==='h2').map(b=>b.text);
+
+  // 1) If there's a strong first heading, use it
+  if(headings.length>0&&!isWeakTitle(headings[0])){
+    autoTitle=headings[0].substring(0,30);
     titleInput.value=autoTitle;
-    aiBadge.style.display='none';
     autoBadge.style.display='inline';
+    aiBadge.style.display='none';
+    document.getElementById('charCount').textContent=autoTitle.length+'/30';
     return;
   }
-  aiTitlePending=true;
-  aiBadge.style.display='inline';
-  aiBadge.textContent='⏳ generating title…';
-  autoBadge.style.display='none';
-  try{
-    const snippet=raw.substring(0,2000);
-    const resp=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        model:'claude-sonnet-4-20250514',
-        max_tokens:60,
-        messages:[{role:'user',content:`You are a document title generator. Read this text and generate a short, descriptive document title that summarizes the ENTIRE document. STRICT RULES:\n- Maximum 30 characters (including spaces)\n- Summarize the whole document, not just the first section\n- Output ONLY the title text, nothing else\n- No quotes, no punctuation at the end\n\nText:\n${snippet}`}]
-      })
-    });
-    const data=await resp.json();
-    const aiTitle=(data.content&&data.content[0]&&data.content[0].text)||'';
-    const cleaned=aiTitle.trim().replace(/^["']|["']$/g,'').replace(/\.$/,'');
-    if(cleaned&&!titleInput.value.trim()){
-      titleInput.value=cleaned.substring(0,30);
-      autoTitle=cleaned.substring(0,30);
-      aiBadge.textContent='✨ AI-generated';
-      aiBadge.style.display='inline';
-    }
-  }catch(e){
-    console.error('AI title error:',e);
-    if(!titleInput.value.trim()){
-      const fb=cleanInline(raw).substring(0,60);
-      titleInput.value=fb;
-      autoTitle=fb;
-      aiBadge.style.display='none';
-      autoBadge.style.display='inline';
-    }
+
+  // 2) Find the best heading (first non-weak one)
+  const bestHeading=headings.find(h=>!isWeakTitle(h));
+  if(bestHeading){
+    autoTitle=bestHeading.substring(0,30);
+    titleInput.value=autoTitle;
+    autoBadge.style.display='inline';
+    aiBadge.style.display='none';
+    document.getElementById('charCount').textContent=autoTitle.length+'/30';
+    return;
   }
-  aiTitlePending=false;
+
+  // 3) Extract key topics from the full text
+  // Grab all body/bullet text, find the most common meaningful words
+  const allText=blocks.map(b=>b.text).join(' ').toLowerCase();
+  const stopWords=new Set(['the','a','an','and','or','but','in','on','at','to','for','of','with','by','from','is','are','was','were','be','been','being','have','has','had','do','does','did','will','would','could','should','may','might','can','shall','this','that','these','those','it','its','not','no','as','if','then','than','so','up','out','about','into','over','after','before','between','under','above','such','each','which','their','there','them','they','we','our','you','your','he','she','his','her','also','very','just','only','more','most','some','any','all','both','few','many','much','own','same','other','new','old','first','last','next','also','well','back','even','still','already','how','what','when','where','who','why','key','client','relevant','including','based','using']);
+  const words=allText.replace(/[^a-z\s]/g,' ').split(/\s+/).filter(w=>w.length>2&&!stopWords.has(w));
+
+  // Count word frequency
+  const freq={};
+  words.forEach(w=>{freq[w]=(freq[w]||0)+1});
+  const topWords=Object.entries(freq).sort((a,b)=>b[1]-a[1]).slice(0,4).map(e=>e[0]);
+
+  if(topWords.length>=2){
+    // Capitalize and join top words into a title
+    const title=topWords.slice(0,3).map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join(' ');
+    autoTitle=title.substring(0,30);
+    titleInput.value=autoTitle;
+    aiBadge.textContent='🔍 auto-summary';
+    aiBadge.style.display='inline';
+    autoBadge.style.display='none';
+    document.getElementById('charCount').textContent=autoTitle.length+'/30';
+    return;
+  }
+
+  // 4) Last resort: first 30 chars of body text
+  const firstBody=blocks.find(b=>b.type==='body');
+  if(firstBody){
+    autoTitle=firstBody.text.substring(0,30);
+    titleInput.value=autoTitle;
+  }
+  autoBadge.style.display='inline';
+  aiBadge.style.display='none';
+  document.getElementById('charCount').textContent=(autoTitle||'').length+'/30';
 }
 
 function cleanInline(s){
@@ -281,10 +294,6 @@ buildBtn.addEventListener('click',async()=>{
   downloadLink.style.display='none';
   const raw=textArea.value.trim();
   if(!raw)return;
-  if(aiTitlePending){
-    statusEl.textContent='Waiting for AI title…';
-    await new Promise(r=>setTimeout(r,3000));
-  }
   const blocks=parseParagraphs(raw);
   const title=titleInput.value.trim()||autoTitle||'Document';
   try{
