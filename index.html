@@ -552,11 +552,27 @@ function buildDocx(title, blocks) {
   /* Header */
   zip.file('word/header1.xml', makeHeaderXml(title));
 
-  /* Footer with PAGE of NUMPAGES fields */
+  /* Build today's date as MM/DD/YY */
+  var now = new Date();
+  var mm = String(now.getMonth() + 1).padStart(2, '0');
+  var dd = String(now.getDate()).padStart(2, '0');
+  var yy = String(now.getFullYear()).slice(-2);
+  var dateStr = mm + '/' + dd + '/' + yy;
+
+  /* Footer with date on left, PAGE of NUMPAGES on right */
   zip.file('word/footer1.xml',
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
     + '<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
-    + '<w:p><w:pPr><w:jc w:val="right"/></w:pPr>'
+    /* Use a tab stop to put date left and page numbers right */
+    + '<w:p><w:pPr>'
+    + '<w:tabs><w:tab w:val="right" w:pos="' + (12240 - MARGIN * 2) + '"/></w:tabs>'
+    + '</w:pPr>'
+    /* Date on the left */
+    + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
+    + '<w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr>'
+    + '<w:t xml:space="preserve">' + dateStr + '</w:t></w:r>'
+    /* Tab to push page numbers to the right */
+    + '<w:r><w:tab/></w:r>'
     /* PAGE field */
     + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
     + '<w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr>'
