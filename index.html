@@ -46,9 +46,15 @@ button{padding:14px 28px;font-family:'Lexend',sans-serif;font-size:1rem;font-wei
       <span class="ai-badge" id="aiBadge">✨ AI-generated</span>
     </div>
     <div class="title-row">
-      <input type="text" id="titleInput" placeholder="Auto-generated from content…">
+      <input type="text" id="titleInput" maxlength="30" placeholder="Auto-generated from content…">
+      <span id="charCount" style="font-size:.7rem;color:#64748b;white-space:nowrap">0/30</span>
     </div>
   </div>
+  <script>
+    document.getElementById('titleInput').addEventListener('input',function(){
+      document.getElementById('charCount').textContent=this.value.length+'/30';
+    });
+  </script>
   <div>
     <label>Paste ChatGPT Text</label>
     <textarea id="textInput" placeholder="Paste your ChatGPT output here…"></textarea>
@@ -111,8 +117,8 @@ async function maybeFetchAITitle(raw){
   const headingText=firstHeading?firstHeading.text:'';
   if(titleInput.value.trim())return;
   if(headingText&&!isWeakTitle(headingText)){
-    autoTitle=headingText;
-    titleInput.value=headingText;
+    autoTitle=headingText.substring(0,30);
+    titleInput.value=autoTitle;
     aiBadge.style.display='none';
     autoBadge.style.display='inline';
     return;
@@ -129,15 +135,15 @@ async function maybeFetchAITitle(raw){
       body:JSON.stringify({
         model:'claude-sonnet-4-20250514',
         max_tokens:60,
-        messages:[{role:'user',content:`You are a document title generator. Read this text and generate a short, descriptive document title (max 8 words). Output ONLY the title text, nothing else. No quotes, no punctuation at the end.\n\nText:\n${snippet}`}]
+        messages:[{role:'user',content:`You are a document title generator. Read this text and generate a short, descriptive document title that summarizes the ENTIRE document. STRICT RULES:\n- Maximum 30 characters (including spaces)\n- Summarize the whole document, not just the first section\n- Output ONLY the title text, nothing else\n- No quotes, no punctuation at the end\n\nText:\n${snippet}`}]
       })
     });
     const data=await resp.json();
     const aiTitle=(data.content&&data.content[0]&&data.content[0].text)||'';
     const cleaned=aiTitle.trim().replace(/^["']|["']$/g,'').replace(/\.$/,'');
     if(cleaned&&!titleInput.value.trim()){
-      titleInput.value=cleaned;
-      autoTitle=cleaned;
+      titleInput.value=cleaned.substring(0,30);
+      autoTitle=cleaned.substring(0,30);
       aiBadge.textContent='✨ AI-generated';
       aiBadge.style.display='inline';
     }
