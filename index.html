@@ -118,7 +118,7 @@ button {
 
   <!-- Title input -->
   <div>
-    <label>Document Title (used in header — splits every 30 characters)</label>
+    <label>Document Title (used in header — splits every 40 characters)</label>
     <div class="title-row" style="margin-top:6px">
       <input type="text" id="titleInput" placeholder="Type your document title here…">
       <span class="char-count" id="charCount">0 chars</span>
@@ -235,7 +235,7 @@ function xmlEsc(s) {
 
 /* Split title into lines of max 30 chars at word boundaries */
 function splitTitle(title) {
-  if (title.length <= 30) return [title];
+  if (title.length <= 40) return [title];
   var words = title.split(/\s+/);
   var lines = [];
   var current = '';
@@ -243,7 +243,7 @@ function splitTitle(title) {
     var w = words[i];
     if (!current) {
       current = w;
-    } else if ((current + ' ' + w).length <= 30) {
+    } else if ((current + ' ' + w).length <= 40) {
       current += ' ' + w;
     } else {
       lines.push(current);
