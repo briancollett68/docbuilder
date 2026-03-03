@@ -160,7 +160,6 @@ var charCount    = document.getElementById('charCount');
 var titlePreview = document.getElementById('titlePreview');
 
 var debounceTimer = null;
-var rawPastedText = '';  /* Store the raw plain text from clipboard */
 
 /* ============================================================
    EVENT LISTENERS
@@ -178,13 +177,6 @@ textInput.addEventListener('input', function () {
 });
 
 textInput.addEventListener('paste', function (e) {
-  /* Intercept the raw plain text BEFORE the browser renders it */
-  if (e.clipboardData) {
-    var plain = e.clipboardData.getData('text/plain');
-    if (plain) {
-      rawPastedText = plain;
-    }
-  }
   setTimeout(function () {
     if (getRawText().trim()) {
       parseAndPreview();
@@ -254,11 +246,110 @@ buildBtn.addEventListener('click', function () {
 /* ============================================================
    HELPERS
    ============================================================ */
-/* Get the best available raw text — prefer the stored clipboard text
-   which has ## markers and ** markers intact */
+/* Get the best available text for parsing.
+   After user edits the div, rawPastedText is stale.
+   So we reconstruct markdown-like text from the current div HTML. */
 function getRawText() {
-  if (rawPastedText) return rawPastedText;
-  return textInput.innerText || textInput.textContent || '';
+  var html = textInput.innerHTML;
+  /* Convert HTML back to markdown-like text */
+  var text = htmlToMarkdown(html);
+  return text;
+}
+
+/* Convert contenteditable HTML back to text with markdown markers */
+function htmlToMarkdown(html) {
+  /* Work on a temp element */
+  var temp = document.createElement('div');
+  temp.innerHTML = html;
+
+  var lines = [];
+  processNode(temp, lines, '');
+  return lines.join('\n');
+}
+
+function processNode(node, lines, prefix) {
+  var children = node.childNodes;
+  for (var i = 0; i < children.length; i++) {
+    var child = children[i];
+    var tag = (child.tagName || '').toUpperCase();
+
+    if (child.nodeType === 3) {
+      /* Text node — append to current line */
+      var t = child.textContent;
+      if (t) {
+        if (lines.length === 0) lines.push('');
+        lines[lines.length - 1] += t;
+      }
+      continue;
+    }
+
+    /* Headings */
+    if (tag === 'H1') { lines.push('# ' + child.textContent.trim()); lines.push(''); continue; }
+    if (tag === 'H2') { lines.push('## ' + child.textContent.trim()); lines.push(''); continue; }
+    if (tag === 'H3') { lines.push('### ' + child.textContent.trim()); lines.push(''); continue; }
+    if (tag === 'H4') { lines.push('#### ' + child.textContent.trim()); lines.push(''); continue; }
+
+    /* List items */
+    if (tag === 'UL' || tag === 'OL') {
+      var items = child.querySelectorAll('li');
+      for (var j = 0; j < items.length; j++) {
+        lines.push('- ' + getTextWithBold(items[j]));
+      }
+      lines.push('');
+      continue;
+    }
+    if (tag === 'LI') {
+      lines.push('- ' + getTextWithBold(child));
+      continue;
+    }
+
+    /* Block elements — start new line */
+    if (tag === 'P' || tag === 'DIV') {
+      var content = getTextWithBold(child);
+      if (content.trim()) {
+        lines.push(content);
+      }
+      lines.push('');
+      continue;
+    }
+
+    /* BR — newline */
+    if (tag === 'BR') {
+      lines.push('');
+      continue;
+    }
+
+    /* Bold/strong — wrap in ** */
+    if (tag === 'B' || tag === 'STRONG') {
+      if (lines.length === 0) lines.push('');
+      lines[lines.length - 1] += '**' + child.textContent + '**';
+      continue;
+    }
+
+    /* Other inline elements — just get text */
+    if (lines.length === 0) lines.push('');
+    processNode(child, lines, prefix);
+  }
+}
+
+/* Get text content of an element, wrapping bold parts in ** */
+function getTextWithBold(el) {
+  var result = '';
+  var children = el.childNodes;
+  for (var i = 0; i < children.length; i++) {
+    var child = children[i];
+    var tag = (child.tagName || '').toUpperCase();
+    if (child.nodeType === 3) {
+      result += child.textContent;
+    } else if (tag === 'B' || tag === 'STRONG') {
+      result += '**' + child.textContent + '**';
+    } else if (tag === 'BR') {
+      result += '\n';
+    } else {
+      result += getTextWithBold(child);
+    }
+  }
+  return result;
 }
 
 function checkReady() {
@@ -562,26 +653,38 @@ function parseInlineRuns(s) {
 function looksLikeHeading(text, isFirstLine) {
   var t = text.trim();
   if (!t) return false;
+  
+  /* First line of document — very likely a heading if short */
   if (isFirstLine && t.length < 80) return true;
-  /* Short line, no ending punctuation, no markdown bold wrapping the whole thing */
+  
+  /* Too long for a heading */
   if (t.length > 60) return false;
-  if (t.length < 3) return false;
+  if (t.length < 2) return false;
+  
   /* Ends with sentence punctuation — probably not a heading */
   var lastChar = t.charAt(t.length - 1);
-  if ('.!?;:,'.indexOf(lastChar) !== -1) return false;
-  /* Has a period in the middle (like a sentence) — probably not a heading */
+  if ('.!?;,'.indexOf(lastChar) !== -1) return false;
+  
+  /* Has a period followed by space (like a sentence) — probably not a heading */
   if (/\.\s/.test(t)) return false;
-  /* Mostly lowercase with lots of words — probably a sentence */
+  
+  /* Too many words for a heading */
   var words = t.split(/\s+/);
-  if (words.length > 8) return false;
+  if (words.length > 10) return false;
+
+  /* Short lines (1-4 words) without punctuation are almost always headings */
+  if (words.length <= 4) return true;
+  
+  /* Check if it ends with a parenthetical like (How We Underwrite) — common heading pattern */
+  if (/\([^)]+\)\s*$/.test(t)) return true;
+  
   /* If most words start with uppercase, likely a title */
   var capCount = 0;
   for (var i = 0; i < words.length; i++) {
-    if (/^[A-Z\(\$\d]/.test(words[i])) capCount++;
+    if (/^[A-Z\(\$\d"'\u201C]/.test(words[i])) capCount++;
   }
-  if (capCount >= Math.ceil(words.length * 0.5)) return true;
-  /* Short enough and no punctuation — treat as heading */
-  if (words.length <= 4) return true;
+  if (capCount >= Math.ceil(words.length * 0.4)) return true;
+  
   return false;
 }
 
