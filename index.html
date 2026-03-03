@@ -547,10 +547,38 @@ function parseInlineRuns(s) {
   return runs;
 }
 
+/* Detect if a plain line looks like a heading (no ## markers needed) */
+function looksLikeHeading(text, isFirstLine) {
+  var t = text.trim();
+  if (!t) return false;
+  if (isFirstLine && t.length < 80) return true;
+  /* Short line, no ending punctuation, no markdown bold wrapping the whole thing */
+  if (t.length > 60) return false;
+  if (t.length < 3) return false;
+  /* Ends with sentence punctuation — probably not a heading */
+  var lastChar = t.charAt(t.length - 1);
+  if ('.!?;:,'.indexOf(lastChar) !== -1) return false;
+  /* Has a period in the middle (like a sentence) — probably not a heading */
+  if (/\.\s/.test(t)) return false;
+  /* Mostly lowercase with lots of words — probably a sentence */
+  var words = t.split(/\s+/);
+  if (words.length > 8) return false;
+  /* If most words start with uppercase, likely a title */
+  var capCount = 0;
+  for (var i = 0; i < words.length; i++) {
+    if (/^[A-Z\(\$\d]/.test(words[i])) capCount++;
+  }
+  if (capCount >= Math.ceil(words.length * 0.5)) return true;
+  /* Short enough and no punctuation — treat as heading */
+  if (words.length <= 4) return true;
+  return false;
+}
+
 function parseParagraphs(raw) {
   var t = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n{3,}/g, '\n\n');
   var lines = t.split('\n');
   var blocks = [], i = 0;
+  var isFirstContent = true;
 
   while (i < lines.length) {
     var tr = lines[i].trim();
@@ -559,26 +587,52 @@ function parseParagraphs(raw) {
     if (isDivider(tr)) { blocks.push({ type: 'divider' }); i++; continue; }
 
     var hM = tr.match(/^(#{1,6})\s+(.*)/);
-    if (hM) { var lv = hM[1].length; var tx = cleanInline(hM[2]); blocks.push({ type: lv <= 1 ? 'h1' : 'h2', text: tx, runs: [{ t: tx, b: true }] }); i++; continue; }
+    if (hM) {
+      var lv = hM[1].length;
+      var tx = cleanInline(hM[2]);
+      blocks.push({ type: lv <= 1 ? 'h1' : (lv <= 2 ? 'h2' : 'h3'), text: tx, runs: [{ t: tx, b: true }] });
+      isFirstContent = false;
+      i++; continue;
+    }
 
     var bL = tr.match(/^\*\*(.+?)\*\*$/);
-    if (bL && tr.length < 120) { var tx = cleanInline(bL[1]); blocks.push({ type: 'h2', text: tx, runs: [{ t: tx, b: true }] }); i++; continue; }
+    if (bL && tr.length < 120) { var tx = cleanInline(bL[1]); blocks.push({ type: 'h2', text: tx, runs: [{ t: tx, b: true }] }); isFirstContent = false; i++; continue; }
 
-    if (isQuotedLine(tr)) { var cl = tr.replace(/^[\u201C\u201D"*]+|[\u201C\u201D"*]+$/g, '').trim(); blocks.push({ type: 'callout', text: cl, runs: [{ t: cl, b: true }] }); i++; continue; }
+    if (isQuotedLine(tr)) { var cl = tr.replace(/^[\u201C\u201D"*]+|[\u201C\u201D"*]+$/g, '').trim(); blocks.push({ type: 'callout', text: cl, runs: [{ t: cl, b: true }] }); isFirstContent = false; i++; continue; }
 
     var buM = tr.match(/^[\t ]*[-*\u2022]\s+(.*)/);
-    if (buM) { blocks.push({ type: 'bullet', text: cleanInline(buM[1]), runs: parseInlineRuns(buM[1]) }); i++; continue; }
+    if (buM) { blocks.push({ type: 'bullet', text: cleanInline(buM[1]), runs: parseInlineRuns(buM[1]) }); isFirstContent = false; i++; continue; }
 
     var nM = tr.match(/^[\t ]*\d+[.\)]\s+(.*)/);
-    if (nM) { blocks.push({ type: 'bullet', text: cleanInline(nM[1]), runs: parseInlineRuns(nM[1]) }); i++; continue; }
+    if (nM) { blocks.push({ type: 'bullet', text: cleanInline(nM[1]), runs: parseInlineRuns(nM[1]) }); isFirstContent = false; i++; continue; }
+
+    /* Check if this plain line looks like a heading */
+    if (looksLikeHeading(tr, isFirstContent)) {
+      var tx = cleanInline(tr);
+      blocks.push({ type: isFirstContent ? 'h1' : 'h2', text: tx, runs: [{ t: tx, b: true }] });
+      isFirstContent = false;
+      i++; continue;
+    }
 
     var para = tr; i++;
     while (i < lines.length && lines[i].trim() && !isDivider(lines[i].trim()) && !isQuotedLine(lines[i].trim()) &&
-           !lines[i].trim().match(/^(#{1,6}\s|[\t ]*[-*\u2022]\s|[\t ]*\d+[.\)]\s|\*\*.+\*\*$)/)) {
+           !lines[i].trim().match(/^(#{1,6}\s|[\t ]*[-*\u2022]\s|[\t ]*\d+[.\)]\s|\*\*.+\*\*$)/) &&
+           !looksLikeHeading(lines[i].trim(), false)) {
       para += ' ' + lines[i].trim(); i++;
     }
     blocks.push({ type: 'body', text: cleanInline(para), runs: parseInlineRuns(para) });
+    isFirstContent = false;
   }
+
+  /* Post-process: mark headings that are followed by another heading as 'section' */
+  for (var j = 0; j < blocks.length - 1; j++) {
+    var curr = blocks[j];
+    var next = blocks[j + 1];
+    if ((curr.type === 'h1' || curr.type === 'h2') && (next.type === 'h1' || next.type === 'h2' || next.type === 'h3')) {
+      curr.type = 'section';
+    }
+  }
+
   return blocks;
 }
 
@@ -590,8 +644,10 @@ function parseAndPreview() {
   var html = '<b>Structure Preview:</b><br>';
   for (var i = 0; i < blocks.length; i++) {
     var b = blocks[i];
-    if (b.type === 'h1') html += '<div class="h1">H1: ' + esc(b.text) + '</div>';
+    if (b.type === 'section') html += '<div class="h1" style="border-bottom:1px solid #3b82f6;padding-bottom:2px">SECTION: ' + esc(b.text) + '</div>';
+    else if (b.type === 'h1') html += '<div class="h1">H1: ' + esc(b.text) + '</div>';
     else if (b.type === 'h2') html += '<div class="h2">H2: ' + esc(b.text) + '</div>';
+    else if (b.type === 'h3') html += '<div class="h2" style="padding-left:12px;font-size:0.82rem">H3: ' + esc(b.text) + '</div>';
     else if (b.type === 'divider') html += '<div class="divider">\u2500\u2500\u2500 section break \u2500\u2500\u2500</div>';
     else if (b.type === 'callout') html += '<div class="callout">\u275D ' + esc(b.text) + '</div>';
     else if (b.type === 'bullet') html += '<div class="bullet">\u2022 ' + esc(b.text.substring(0, 80)) + (b.text.length > 80 ? '\u2026' : '') + '</div>';
@@ -629,7 +685,16 @@ function makeBody(blocks) {
   var xml = '';
   for (var i = 0; i < blocks.length; i++) {
     var b = blocks[i];
-    if (b.type === 'h1') {
+    if (b.type === 'section') {
+      /* Section heading — same as h2 but with a blue underline beneath */
+      var befS = (i === 0) ? '0' : '' + tw(12);
+      xml += '<w:p><w:pPr><w:pStyle w:val="Heading1"/>'
+        + '<w:spacing w:before="' + befS + '" w:after="' + tw(2) + '" w:line="240" w:lineRule="auto"/>'
+        + '<w:pBdr><w:bottom w:val="single" w:sz="6" w:space="2" w:color="' + BLUE + '"/></w:pBdr>'
+        + '</w:pPr>'
+        + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/><w:sz w:val="' + hp(14) + '"/><w:szCs w:val="' + hp(14) + '"/><w:color w:val="' + BLUE + '"/></w:rPr>'
+        + '<w:t xml:space="preserve">' + xmlEsc(b.text) + '</w:t></w:r></w:p>';
+    } else if (b.type === 'h1') {
       var bef = (i === 0) ? '0' : '' + tw(8);
       xml += '<w:p><w:pPr><w:pStyle w:val="Heading1"/><w:spacing w:before="' + bef + '" w:after="' + tw(2) + '" w:line="240" w:lineRule="auto"/></w:pPr>'
         + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/><w:sz w:val="' + hp(14) + '"/><w:szCs w:val="' + hp(14) + '"/><w:color w:val="' + BLUE + '"/></w:rPr>'
@@ -637,6 +702,11 @@ function makeBody(blocks) {
     } else if (b.type === 'h2') {
       var bef = (i === 0) ? '0' : '' + tw(8);
       xml += '<w:p><w:pPr><w:pStyle w:val="Heading2"/><w:spacing w:before="' + bef + '" w:after="' + tw(2) + '" w:line="240" w:lineRule="auto"/></w:pPr>'
+        + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/><w:sz w:val="' + hp(13) + '"/><w:szCs w:val="' + hp(13) + '"/><w:color w:val="' + BLUE + '"/></w:rPr>'
+        + '<w:t xml:space="preserve">' + xmlEsc(b.text) + '</w:t></w:r></w:p>';
+    } else if (b.type === 'h3') {
+      /* Sub-heading — same color, slightly less space before */
+      xml += '<w:p><w:pPr><w:pStyle w:val="Heading2"/><w:spacing w:before="' + tw(4) + '" w:after="' + tw(2) + '" w:line="240" w:lineRule="auto"/></w:pPr>'
         + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/><w:sz w:val="' + hp(13) + '"/><w:szCs w:val="' + hp(13) + '"/><w:color w:val="' + BLUE + '"/></w:rPr>'
         + '<w:t xml:space="preserve">' + xmlEsc(b.text) + '</w:t></w:r></w:p>';
     } else if (b.type === 'divider') {
