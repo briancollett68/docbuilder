@@ -35,11 +35,14 @@ label { font-size: 0.85rem; color: #94a3b8; font-weight: 700; }
   font-family: 'Lexend', sans-serif;
   font-size: 0.9rem;
   padding: 14px;
-  resize: vertical;
   outline: none;
   transition: border 0.2s;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-wrap: break-word;
 }
 #textInput:focus { border-color: #3b82f6; }
+#textInput b, #textInput strong { color: #e2e8f0; font-weight: 700; }
 
 .title-row { display: flex; gap: 10px; align-items: center; }
 
@@ -58,15 +61,6 @@ label { font-size: 0.85rem; color: #94a3b8; font-weight: 700; }
 .title-row input:focus { border-color: #3b82f6; }
 
 .char-count { font-size: 0.7rem; color: #64748b; white-space: nowrap; }
-.source-badge {
-  font-size: 0.7rem;
-  padding: 3px 8px;
-  border-radius: 4px;
-  white-space: nowrap;
-  display: none;
-}
-.source-md { color: #3b82f6; background: #1e3a5f; }
-.source-rich { color: #a78bfa; background: #2e1065; }
 
 button {
   padding: 14px 28px;
@@ -119,11 +113,7 @@ button {
 }
 .title-preview span { color: #64748b; font-size: 0.7rem; display: block; margin-bottom: 4px; }
 
-.input-hint {
-  font-size: 0.7rem;
-  color: #475569;
-  margin-top: 4px;
-}
+.input-hint { font-size: 0.7rem; color: #475569; margin-top: 4px; }
 </style>
 </head>
 <body>
@@ -134,7 +124,7 @@ button {
 <div class="container">
 
   <div>
-    <label>Document Title (used in header — splits every 40 characters)</label>
+    <label>Document Title (used in header)</label>
     <div class="title-row" style="margin-top:6px">
       <input type="text" id="titleInput" placeholder="Type your document title here…">
       <span class="char-count" id="charCount">0 chars</span>
@@ -143,13 +133,9 @@ button {
   </div>
 
   <div>
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-      <label>Paste Your Text</label>
-      <span class="source-badge source-md" id="mdBadge">Markdown detected</span>
-      <span class="source-badge source-rich" id="richBadge">Rich formatting detected</span>
-    </div>
-    <textarea id="textInput" placeholder="Paste your ChatGPT output here…"></textarea>
-    <div class="input-hint">Supports: ChatGPT markdown, rich text (Word, Docs, email). Quotes in "…" become blue bold callouts.</div>
+    <label>Paste Your Text</label>
+    <div id="textInput" contenteditable="true"></div>
+    <div class="input-hint">Supports ChatGPT markdown and rich text from Word/Docs/email.</div>
   </div>
 
   <div id="previewBox" class="preview" style="display:none"></div>
@@ -172,11 +158,8 @@ var statusEl     = document.getElementById('status');
 var previewBox   = document.getElementById('previewBox');
 var charCount    = document.getElementById('charCount');
 var titlePreview = document.getElementById('titlePreview');
-var mdBadge      = document.getElementById('mdBadge');
-var richBadge    = document.getElementById('richBadge');
 
 var debounceTimer = null;
-var lastPastedHTML = '';
 
 /* ============================================================
    EVENT LISTENERS
@@ -185,30 +168,18 @@ textInput.addEventListener('input', function () {
   checkReady();
   clearTimeout(debounceTimer);
   debounceTimer = setTimeout(function () {
-    var content = getContent();
-    if (textInput.value.trim()) {
-      parseAndPreview(content);
+    if (getText().trim()) {
+      parseAndPreview();
     } else {
       previewBox.style.display = 'none';
-      mdBadge.style.display = 'none';
-      richBadge.style.display = 'none';
     }
   }, 300);
 });
 
-textInput.addEventListener('paste', function (e) {
-  if (e.clipboardData) {
-    var html = e.clipboardData.getData('text/html');
-    if (html) {
-      lastPastedHTML = html;
-    } else {
-      lastPastedHTML = '';
-    }
-  }
+textInput.addEventListener('paste', function () {
   setTimeout(function () {
-    var content = getContent();
-    if (textInput.value.trim()) {
-      parseAndPreview(content);
+    if (getText().trim()) {
+      parseAndPreview();
       checkReady();
     }
   }, 100);
@@ -235,18 +206,20 @@ buildBtn.addEventListener('click', function () {
   statusEl.className = 'status loading';
   statusEl.textContent = 'Building document\u2026';
 
-  var title   = cleanTitle(titleInput.value.trim());
-  var content = getContent();
-  if (!content.text.trim() || !title) {
+  var title = cleanTitle(titleInput.value.trim());
+  var text  = getText().trim();
+
+  if (!text || !title) {
     statusEl.className = 'status err';
     statusEl.textContent = 'Error: Please enter both a title and text.';
     return;
   }
 
-  var blocks = content.blocks;
+  var blocks = getBlocks();
+
   if (!blocks || blocks.length === 0) {
     statusEl.className = 'status err';
-    statusEl.textContent = 'Error: Could not parse any content from the text.';
+    statusEl.textContent = 'Error: Could not parse any content.';
     return;
   }
 
@@ -273,8 +246,12 @@ buildBtn.addEventListener('click', function () {
 /* ============================================================
    HELPERS
    ============================================================ */
+function getText() {
+  return textInput.innerText || textInput.textContent || '';
+}
+
 function checkReady() {
-  var hasText  = textInput.value.trim().length > 0;
+  var hasText  = getText().trim().length > 0;
   var hasTitle = titleInput.value.trim().length > 0;
   buildBtn.disabled = !(hasText && hasTitle);
 }
@@ -295,81 +272,86 @@ function cleanTitle(t) {
 }
 
 /* ============================================================
+   CONTENT EXTRACTION
+   Uses the HTML from the contenteditable div to detect bold,
+   then falls back to plain text markdown parsing.
+   ============================================================ */
+function getBlocks() {
+  var html = textInput.innerHTML;
+  var text = getText();
+
+  var hasRichBold = /<(b|strong)[^>]*>/i.test(html);
+  var hasMarkdown = /\*\*[^*]+\*\*/.test(text) || /^#{1,6}\s/m.test(text);
+
+  if (hasMarkdown) {
+    return parseParagraphs(text);
+  } else if (hasRichBold) {
+    var blocks = parseRichHTML(html);
+    if (blocks && blocks.length > 0) return blocks;
+  }
+  return parseParagraphs(text);
+}
+
+/* ============================================================
    SMART TITLE SPLITTING
    ============================================================ */
 var KEEP_WITH_NEXT = ['for', 'the', 'a', 'an', 'and', 'or', 'of', 'in', 'on', 'at', 'to', 'by', 'with', 'from', 'as', 'is', 'its', 'not', 'but', 'nor', 'per', 'via'];
-
 var MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december', 'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
 var PERIOD_LABELS = ['q1', 'q2', 'q3', 'q4', 'fy', 'cy', 'ytd', 'mtd', 'h1', 'h2'];
-var STATUS_WORDS = ['draft', 'final', 'revised', 'updated', 'version', 'confidential', 'internal', 'external', 'preliminary'];
 var DATE_PREFACE = ['as', 'of', 'dated', 'updated', 'revised', 'effective', 'through', 'ending', 'for'];
 
-function isMonthWord(word) { return MONTHS.indexOf(word.toLowerCase()) !== -1; }
-function isPeriodLabel(word) { return PERIOD_LABELS.indexOf(word.toLowerCase()) !== -1; }
-function isYear(word) { return /^[''\u2018\u2019]?\d{2,4}$/.test(word); }
-function isDatePattern(word) { return /^\d{1,2}[\/\-]\d{2,4}$/.test(word) || /^\d{4}[\/\-]\d{1,2}$/.test(word); }
-function isStatusWord(word) { return STATUS_WORDS.indexOf(word.toLowerCase().replace(/[()]/g, '')) !== -1; }
-function isParenthetical(word) { return /^\(.*\)$/.test(word); }
+function isMonthWord(w) { return MONTHS.indexOf(w.toLowerCase()) !== -1; }
+function isPeriodLabel(w) { return PERIOD_LABELS.indexOf(w.toLowerCase()) !== -1; }
+function isYear(w) { return /^[''\u2018\u2019]?\d{2,4}$/.test(w); }
+function isDatePattern(w) { return /^\d{1,2}[\/\-]\d{2,4}$/.test(w) || /^\d{4}[\/\-]\d{1,2}$/.test(w); }
+function isParenthetical(w) { return /^\(.*\)$/.test(w); }
 
 function splitTitle(title) {
   var trimmed = title.trim();
 
   /* STEP 1: Split on explicit separators */
-  var sepMatch = trimmed.match(/^(.+?)\s*[—–\|]\s*(.+)$/);
-  if (sepMatch) {
-    var left = sepMatch[1].trim();
-    var right = sepMatch[2].trim();
-    if (left && right) {
-      var result = [];
-      var leftLines = splitTitle(left);
-      var rightLines = splitTitle(right);
-      for (var i = 0; i < leftLines.length; i++) result.push(leftLines[i]);
-      for (var i = 0; i < rightLines.length; i++) result.push(rightLines[i]);
-      return result;
-    }
+  var sepMatch = trimmed.match(/^(.+?)\s*[\u2014\u2013\|]\s*(.+)$/);
+  if (sepMatch && sepMatch[1].trim() && sepMatch[2].trim()) {
+    var result = [];
+    var l = splitTitle(sepMatch[1].trim());
+    var r = splitTitle(sepMatch[2].trim());
+    for (var i = 0; i < l.length; i++) result.push(l[i]);
+    for (var i = 0; i < r.length; i++) result.push(r[i]);
+    return result;
   }
 
   var colonMatch = trimmed.match(/^(.{8,}?)\s*:\s*(.{4,})$/);
-  if (colonMatch) {
-    var cLeft = colonMatch[1].trim();
-    var cRight = colonMatch[2].trim();
-    if (cLeft && cRight) {
-      var result = [];
-      var cl = splitTitle(cLeft);
-      var cr = splitTitle(cRight);
-      for (var i = 0; i < cl.length; i++) result.push(cl[i]);
-      for (var i = 0; i < cr.length; i++) result.push(cr[i]);
-      return result;
-    }
+  if (colonMatch && colonMatch[1].trim() && colonMatch[2].trim()) {
+    var result = [];
+    var l = splitTitle(colonMatch[1].trim());
+    var r = splitTitle(colonMatch[2].trim());
+    for (var i = 0; i < l.length; i++) result.push(l[i]);
+    for (var i = 0; i < r.length; i++) result.push(r[i]);
+    return result;
   }
 
-  /* STEP 2: Find date groups and split before them — ALWAYS */
+  /* STEP 2: Always split before date groups */
   var words = trimmed.split(/\s+/);
-
   var dateStart = -1;
+
   for (var i = 0; i < words.length; i++) {
-    var w = words[i];
-    if (isMonthWord(w) || isPeriodLabel(w) || isDatePattern(w)) {
+    if (isMonthWord(words[i]) || isPeriodLabel(words[i]) || isDatePattern(words[i])) {
       dateStart = i;
-      while (dateStart > 0 && DATE_PREFACE.indexOf(words[dateStart - 1].toLowerCase()) !== -1) {
-        dateStart--;
-      }
+      while (dateStart > 0 && DATE_PREFACE.indexOf(words[dateStart - 1].toLowerCase()) !== -1) dateStart--;
       break;
     }
-    if (isYear(w) && i > 0 && !isMonthWord(words[i - 1])) {
+    if (isYear(words[i]) && i > 0 && !isMonthWord(words[i - 1])) {
       dateStart = i;
-      while (dateStart > 0 && DATE_PREFACE.indexOf(words[dateStart - 1].toLowerCase()) !== -1) {
-        dateStart--;
-      }
+      while (dateStart > 0 && DATE_PREFACE.indexOf(words[dateStart - 1].toLowerCase()) !== -1) dateStart--;
       break;
     }
   }
 
   if (dateStart > 0) {
-    var beforeDate = words.slice(0, dateStart).join(' ');
+    var before = words.slice(0, dateStart).join(' ');
     var dateGroup = words.slice(dateStart).join(' ');
-    if (beforeDate.trim() && dateGroup.trim()) {
-      var mainLines = (beforeDate.length > 40) ? splitTitle(beforeDate) : [beforeDate.trim()];
+    if (before.trim() && dateGroup.trim()) {
+      var mainLines = (before.length > 40) ? splitTitle(before) : [before.trim()];
       mainLines.push(dateGroup.trim());
       return mainLines;
     }
@@ -378,15 +360,15 @@ function splitTitle(title) {
   /* STEP 3: Split before parentheticals */
   for (var i = 1; i < words.length; i++) {
     if (isParenthetical(words[i])) {
-      var beforeParen = words.slice(0, i).join(' ');
-      var parenGroup = words.slice(i).join(' ');
-      if (beforeParen.trim()) {
-        var result = splitTitle(beforeParen.trim());
-        var lastLine = result[result.length - 1];
-        if ((lastLine + ' ' + parenGroup).length <= 40) {
-          result[result.length - 1] = lastLine + ' ' + parenGroup;
+      var before = words.slice(0, i).join(' ');
+      var paren = words.slice(i).join(' ');
+      if (before.trim()) {
+        var result = splitTitle(before.trim());
+        var last = result[result.length - 1];
+        if ((last + ' ' + paren).length <= 40) {
+          result[result.length - 1] = last + ' ' + paren;
         } else {
-          result.push(parenGroup.trim());
+          result.push(paren.trim());
         }
         return result;
       }
@@ -404,32 +386,25 @@ function splitTitle(title) {
     var w = words[i];
 
     if (current && (isMonthWord(w) || isPeriodLabel(w) || isDatePattern(w))) {
-      lines.push(current);
-      current = w;
-      continue;
+      lines.push(current); current = w; continue;
     }
-
     if (current && isYear(w)) {
-      var prevWords = current.split(/\s+/);
-      var prevWord = prevWords[prevWords.length - 1];
-      if (isMonthWord(prevWord) || isPeriodLabel(prevWord)) {
-        current += ' ' + w;
-        continue;
+      var prev = current.split(/\s+/);
+      if (isMonthWord(prev[prev.length - 1]) || isPeriodLabel(prev[prev.length - 1])) {
+        current += ' ' + w; continue;
       }
     }
 
     var test = current ? current + ' ' + w : w;
-
     if (test.length <= 40) {
       current = test;
     } else {
       if (current) {
         var parts = current.split(/\s+/);
-        var lastWord = parts[parts.length - 1].toLowerCase();
-        if (parts.length > 1 && KEEP_WITH_NEXT.indexOf(lastWord) !== -1) {
+        var lastW = parts[parts.length - 1].toLowerCase();
+        if (parts.length > 1 && KEEP_WITH_NEXT.indexOf(lastW) !== -1) {
           var moved = parts.pop();
-          current = parts.join(' ');
-          lines.push(current);
+          lines.push(parts.join(' '));
           current = moved + ' ' + w;
         } else {
           lines.push(current);
@@ -445,45 +420,6 @@ function splitTitle(title) {
 }
 
 /* ============================================================
-   CONTENT EXTRACTION
-   ============================================================ */
-function getContent() {
-  var text = textInput.value || '';
-
-  /* Always parse the plain text from the textarea using markdown parser.
-     The textarea shows exactly what you pasted — that's the source of truth.
-     Rich HTML from clipboard is only used if the plain text has NO markdown
-     markers at all (meaning it came from Word/Docs/email, not ChatGPT). */
-  var hasMarkdown = /\*\*[^*]+\*\*/.test(text) || /^#{1,6}\s/m.test(text) || /^[-*\u2022]\s/m.test(text) || /^\d+[.\)]\s/m.test(text);
-
-  var blocks;
-
-  if (hasMarkdown) {
-    /* ChatGPT-style text — use markdown parser on the plain text */
-    mdBadge.style.display = 'inline';
-    richBadge.style.display = 'none';
-    blocks = parseParagraphs(text);
-  } else if (lastPastedHTML && /<(b|strong)[^>]*>/i.test(lastPastedHTML)) {
-    /* No markdown found, but clipboard had bold HTML — try rich parser */
-    mdBadge.style.display = 'none';
-    richBadge.style.display = 'inline';
-    blocks = parseRichHTML(lastPastedHTML);
-    /* If rich parsing failed, fall back to plain text */
-    if (!blocks || blocks.length === 0) {
-      blocks = parseParagraphs(text);
-      richBadge.style.display = 'none';
-    }
-  } else {
-    /* Plain text, no markdown, no rich — just parse as plain */
-    mdBadge.style.display = 'none';
-    richBadge.style.display = 'none';
-    blocks = parseParagraphs(text);
-  }
-
-  return { text: text, blocks: blocks };
-}
-
-/* ============================================================
    RICH HTML PARSER
    ============================================================ */
 function parseRichHTML(html) {
@@ -494,66 +430,42 @@ function parseRichHTML(html) {
 
   for (var i = 0; i < children.length; i++) {
     var node = children[i];
-    var tagName = (node.tagName || '').toUpperCase();
+    var tag = (node.tagName || '').toUpperCase();
 
     if (node.nodeType === 3 && !node.textContent.trim()) continue;
 
-    if (tagName === 'H1') {
-      blocks.push({ type: 'h1', text: node.textContent.trim(), runs: [{ t: node.textContent.trim(), b: true }] });
-      continue;
-    }
-    if (tagName === 'H2' || tagName === 'H3') {
-      blocks.push({ type: 'h2', text: node.textContent.trim(), runs: [{ t: node.textContent.trim(), b: true }] });
-      continue;
-    }
+    if (tag === 'H1') { blocks.push({ type: 'h1', text: node.textContent.trim(), runs: [{ t: node.textContent.trim(), b: true }] }); continue; }
+    if (tag === 'H2' || tag === 'H3') { blocks.push({ type: 'h2', text: node.textContent.trim(), runs: [{ t: node.textContent.trim(), b: true }] }); continue; }
 
-    if (tagName === 'UL' || tagName === 'OL') {
+    if (tag === 'UL' || tag === 'OL') {
       var items = node.querySelectorAll('li');
       for (var j = 0; j < items.length; j++) {
-        var runs = extractRuns(items[j]);
-        blocks.push({ type: 'bullet', text: items[j].textContent.trim(), runs: runs });
+        blocks.push({ type: 'bullet', text: items[j].textContent.trim(), runs: extractRuns(items[j]) });
       }
       continue;
     }
 
-    var el = (node.nodeType === 3) ? null : node;
-    var runs;
-    if (el) {
-      runs = extractRuns(el);
-    } else {
-      var t = node.textContent.trim();
-      if (!t) continue;
-      runs = [{ t: t, b: false }];
-    }
+    var runs = (node.nodeType === 3) ? [{ t: node.textContent.trim(), b: false }] : extractRuns(node);
+    var full = '';
+    for (var k = 0; k < runs.length; k++) full += runs[k].t;
+    full = full.trim();
+    if (!full) continue;
 
-    var fullText = '';
-    for (var k = 0; k < runs.length; k++) fullText += runs[k].t;
-    fullText = fullText.trim();
-    if (!fullText) continue;
-
-    if (isDivider(fullText)) {
-      blocks.push({ type: 'divider' });
-      continue;
-    }
-
-    if (isQuotedLine(fullText)) {
-      var cleaned = fullText.replace(/^[\u201C\u201D"]+|[\u201C\u201D"]+$/g, '').trim();
-      blocks.push({ type: 'callout', text: cleaned, runs: [{ t: cleaned, b: true }] });
-      continue;
+    if (isDivider(full)) { blocks.push({ type: 'divider' }); continue; }
+    if (isQuotedLine(full)) {
+      var cl = full.replace(/^[\u201C\u201D"]+|[\u201C\u201D"]+$/g, '').trim();
+      blocks.push({ type: 'callout', text: cl, runs: [{ t: cl, b: true }] }); continue;
     }
 
     var allBold = true;
-    for (var k = 0; k < runs.length; k++) {
-      if (runs[k].t.trim() && !runs[k].b) { allBold = false; break; }
-    }
+    for (var k = 0; k < runs.length; k++) { if (runs[k].t.trim() && !runs[k].b) { allBold = false; break; } }
 
-    if (allBold && fullText.length < 120) {
-      blocks.push({ type: 'h2', text: fullText, runs: runs });
+    if (allBold && full.length < 120) {
+      blocks.push({ type: 'h2', text: full, runs: runs });
     } else {
-      blocks.push({ type: 'body', text: fullText, runs: runs });
+      blocks.push({ type: 'body', text: full, runs: runs });
     }
   }
-
   return blocks;
 }
 
@@ -572,20 +484,11 @@ function extractRuns(el) {
 }
 
 function walkNodes(node, isBold, runs) {
-  if (node.nodeType === 3) {
-    var t = node.textContent;
-    if (t) runs.push({ t: t, b: isBold });
-    return;
-  }
+  if (node.nodeType === 3) { if (node.textContent) runs.push({ t: node.textContent, b: isBold }); return; }
   var tag = (node.tagName || '').toUpperCase();
   var bold = isBold || tag === 'B' || tag === 'STRONG';
-  if (!bold && node.style && (node.style.fontWeight === 'bold' || node.style.fontWeight === '700')) {
-    bold = true;
-  }
-  var children = node.childNodes;
-  for (var i = 0; i < children.length; i++) {
-    walkNodes(children[i], bold, runs);
-  }
+  if (!bold && node.style && (node.style.fontWeight === 'bold' || node.style.fontWeight === '700')) bold = true;
+  for (var i = 0; i < node.childNodes.length; i++) walkNodes(node.childNodes[i], bold, runs);
 }
 
 /* ============================================================
@@ -593,9 +496,8 @@ function walkNodes(node, isBold, runs) {
    ============================================================ */
 function isDivider(text) {
   var t = text.trim();
-  if (t.length === 0) return false;
-  if (/^[\u2500-\u257F\u2014\u2015\u2012\u2013\u2014\u2015—–\-_=*]{3,}$/.test(t)) return true;
-  if (/^[-_=*]{3,}$/.test(t)) return true;
+  if (!t) return false;
+  if (/^[\u2500-\u257F\u2014\u2015\u2012\u2013—–\-_=*]{3,}$/.test(t)) return true;
   return false;
 }
 
@@ -604,9 +506,7 @@ function isQuotedLine(text) {
   if ((t.charAt(0) === '"' && t.charAt(t.length - 1) === '"') ||
       (t.charAt(0) === '\u201C' && t.charAt(t.length - 1) === '\u201D') ||
       (t.charAt(0) === '"' && t.charAt(t.length - 1) === '\u201D') ||
-      (t.charAt(0) === '\u201C' && t.charAt(t.length - 1) === '"')) {
-    return true;
-  }
+      (t.charAt(0) === '\u201C' && t.charAt(t.length - 1) === '"')) return true;
   return false;
 }
 
@@ -626,22 +526,13 @@ function cleanInline(s) {
 
 function parseInlineRuns(s) {
   s = s.replace(/\*\*\*(.+?)\*\*\*/g, '**$1**');
-  var runs = [];
-  var re = /\*\*(.+?)\*\*/g;
-  var last = 0;
-  var m;
+  var runs = [], re = /\*\*(.+?)\*\*/g, last = 0, m;
   while ((m = re.exec(s)) !== null) {
-    if (m.index > last) {
-      var before = s.substring(last, m.index).replace(/[*_`]/g, '');
-      if (before) runs.push({ t: before, b: false });
-    }
+    if (m.index > last) { var b = s.substring(last, m.index).replace(/[*_`]/g, ''); if (b) runs.push({ t: b, b: false }); }
     runs.push({ t: m[1], b: true });
     last = re.lastIndex;
   }
-  if (last < s.length) {
-    var rest = s.substring(last).replace(/[*_`]/g, '');
-    if (rest) runs.push({ t: rest, b: false });
-  }
+  if (last < s.length) { var r = s.substring(last).replace(/[*_`]/g, ''); if (r) runs.push({ t: r, b: false }); }
   if (runs.length === 0) runs.push({ t: cleanInline(s), b: false });
   return runs;
 }
@@ -649,87 +540,52 @@ function parseInlineRuns(s) {
 function parseParagraphs(raw) {
   var t = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n{3,}/g, '\n\n');
   var lines = t.split('\n');
-  var blocks = [];
-  var i = 0;
+  var blocks = [], i = 0;
 
   while (i < lines.length) {
     var tr = lines[i].trim();
     if (!tr) { i++; continue; }
 
-    if (isDivider(tr)) {
-      blocks.push({ type: 'divider' });
-      i++; continue;
-    }
+    if (isDivider(tr)) { blocks.push({ type: 'divider' }); i++; continue; }
 
     var hM = tr.match(/^(#{1,6})\s+(.*)/);
-    if (hM) {
-      var lv = hM[1].length;
-      var tx = cleanInline(hM[2]);
-      blocks.push({ type: lv <= 1 ? 'h1' : 'h2', text: tx, runs: [{ t: tx, b: true }] });
-      i++; continue;
-    }
+    if (hM) { var lv = hM[1].length; var tx = cleanInline(hM[2]); blocks.push({ type: lv <= 1 ? 'h1' : 'h2', text: tx, runs: [{ t: tx, b: true }] }); i++; continue; }
 
     var bL = tr.match(/^\*\*(.+?)\*\*$/);
-    if (bL && tr.length < 120) {
-      var tx = cleanInline(bL[1]);
-      blocks.push({ type: 'h2', text: tx, runs: [{ t: tx, b: true }] });
-      i++; continue;
-    }
+    if (bL && tr.length < 120) { var tx = cleanInline(bL[1]); blocks.push({ type: 'h2', text: tx, runs: [{ t: tx, b: true }] }); i++; continue; }
 
-    if (isQuotedLine(tr)) {
-      var cleaned = tr.replace(/^[\u201C\u201D"*]+|[\u201C\u201D"*]+$/g, '').trim();
-      blocks.push({ type: 'callout', text: cleaned, runs: [{ t: cleaned, b: true }] });
-      i++; continue;
-    }
+    if (isQuotedLine(tr)) { var cl = tr.replace(/^[\u201C\u201D"*]+|[\u201C\u201D"*]+$/g, '').trim(); blocks.push({ type: 'callout', text: cl, runs: [{ t: cl, b: true }] }); i++; continue; }
 
     var buM = tr.match(/^[\t ]*[-*\u2022]\s+(.*)/);
-    if (buM) {
-      blocks.push({ type: 'bullet', text: cleanInline(buM[1]), runs: parseInlineRuns(buM[1]) });
-      i++; continue;
-    }
+    if (buM) { blocks.push({ type: 'bullet', text: cleanInline(buM[1]), runs: parseInlineRuns(buM[1]) }); i++; continue; }
 
     var nM = tr.match(/^[\t ]*\d+[.\)]\s+(.*)/);
-    if (nM) {
-      blocks.push({ type: 'bullet', text: cleanInline(nM[1]), runs: parseInlineRuns(nM[1]) });
-      i++; continue;
-    }
+    if (nM) { blocks.push({ type: 'bullet', text: cleanInline(nM[1]), runs: parseInlineRuns(nM[1]) }); i++; continue; }
 
-    var para = tr;
-    i++;
-    while (i < lines.length && lines[i].trim() &&
-           !isDivider(lines[i].trim()) &&
-           !isQuotedLine(lines[i].trim()) &&
+    var para = tr; i++;
+    while (i < lines.length && lines[i].trim() && !isDivider(lines[i].trim()) && !isQuotedLine(lines[i].trim()) &&
            !lines[i].trim().match(/^(#{1,6}\s|[\t ]*[-*\u2022]\s|[\t ]*\d+[.\)]\s|\*\*.+\*\*$)/)) {
-      para += ' ' + lines[i].trim();
-      i++;
+      para += ' ' + lines[i].trim(); i++;
     }
     blocks.push({ type: 'body', text: cleanInline(para), runs: parseInlineRuns(para) });
   }
-
   return blocks;
 }
 
 /* ============================================================
    PREVIEW
    ============================================================ */
-function parseAndPreview(content) {
-  var blocks = content.blocks;
+function parseAndPreview() {
+  var blocks = getBlocks();
   var html = '<b>Structure Preview:</b><br>';
   for (var i = 0; i < blocks.length; i++) {
     var b = blocks[i];
-    if (b.type === 'h1') {
-      html += '<div class="h1">H1: ' + esc(b.text) + '</div>';
-    } else if (b.type === 'h2') {
-      html += '<div class="h2">H2: ' + esc(b.text) + '</div>';
-    } else if (b.type === 'divider') {
-      html += '<div class="divider">\u2500\u2500\u2500 section break \u2500\u2500\u2500</div>';
-    } else if (b.type === 'callout') {
-      html += '<div class="callout">\u275D ' + esc(b.text) + '</div>';
-    } else if (b.type === 'bullet') {
-      html += '<div class="bullet">\u2022 ' + esc(b.text.substring(0, 80)) + (b.text.length > 80 ? '\u2026' : '') + '</div>';
-    } else {
-      html += '<div>' + esc(b.text.substring(0, 90)) + (b.text.length > 90 ? '\u2026' : '') + '</div>';
-    }
+    if (b.type === 'h1') html += '<div class="h1">H1: ' + esc(b.text) + '</div>';
+    else if (b.type === 'h2') html += '<div class="h2">H2: ' + esc(b.text) + '</div>';
+    else if (b.type === 'divider') html += '<div class="divider">\u2500\u2500\u2500 section break \u2500\u2500\u2500</div>';
+    else if (b.type === 'callout') html += '<div class="callout">\u275D ' + esc(b.text) + '</div>';
+    else if (b.type === 'bullet') html += '<div class="bullet">\u2022 ' + esc(b.text.substring(0, 80)) + (b.text.length > 80 ? '\u2026' : '') + '</div>';
+    else html += '<div>' + esc(b.text.substring(0, 90)) + (b.text.length > 90 ? '\u2026' : '') + '</div>';
   }
   previewBox.innerHTML = html;
   previewBox.style.display = 'block';
@@ -751,10 +607,8 @@ function makeRuns(runs, sz, color) {
   var xml = '';
   for (var i = 0; i < runs.length; i++) {
     var r = runs[i];
-    xml += '<w:r><w:rPr>'
-      + '<w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
-      + '<w:sz w:val="' + sz + '"/><w:szCs w:val="' + sz + '"/>'
-      + '<w:color w:val="' + color + '"/>'
+    xml += '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
+      + '<w:sz w:val="' + sz + '"/><w:szCs w:val="' + sz + '"/><w:color w:val="' + color + '"/>'
       + (r.b ? '<w:b/><w:bCs/>' : '')
       + '</w:rPr><w:t xml:space="preserve">' + xmlEsc(r.t) + '</w:t></w:r>';
   }
@@ -765,55 +619,31 @@ function makeBody(blocks) {
   var xml = '';
   for (var i = 0; i < blocks.length; i++) {
     var b = blocks[i];
-
     if (b.type === 'h1') {
-      var beforeH1 = (i === 0) ? '0' : '' + tw(8);
-      xml += '<w:p><w:pPr><w:pStyle w:val="Heading1"/>'
-        + '<w:spacing w:before="' + beforeH1 + '" w:after="' + tw(2) + '" w:line="240" w:lineRule="auto"/>'
-        + '</w:pPr>'
-        + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
-        + '<w:b/><w:bCs/><w:sz w:val="' + hp(14) + '"/><w:szCs w:val="' + hp(14) + '"/>'
-        + '<w:color w:val="' + BLUE + '"/></w:rPr>'
+      var bef = (i === 0) ? '0' : '' + tw(8);
+      xml += '<w:p><w:pPr><w:pStyle w:val="Heading1"/><w:spacing w:before="' + bef + '" w:after="' + tw(2) + '" w:line="240" w:lineRule="auto"/></w:pPr>'
+        + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/><w:sz w:val="' + hp(14) + '"/><w:szCs w:val="' + hp(14) + '"/><w:color w:val="' + BLUE + '"/></w:rPr>'
         + '<w:t xml:space="preserve">' + xmlEsc(b.text) + '</w:t></w:r></w:p>';
-
     } else if (b.type === 'h2') {
-      var beforeH2 = (i === 0) ? '0' : '' + tw(8);
-      xml += '<w:p><w:pPr><w:pStyle w:val="Heading2"/>'
-        + '<w:spacing w:before="' + beforeH2 + '" w:after="' + tw(2) + '" w:line="240" w:lineRule="auto"/>'
-        + '</w:pPr>'
-        + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
-        + '<w:b/><w:bCs/><w:sz w:val="' + hp(13) + '"/><w:szCs w:val="' + hp(13) + '"/>'
-        + '<w:color w:val="' + BLUE + '"/></w:rPr>'
+      var bef = (i === 0) ? '0' : '' + tw(8);
+      xml += '<w:p><w:pPr><w:pStyle w:val="Heading2"/><w:spacing w:before="' + bef + '" w:after="' + tw(2) + '" w:line="240" w:lineRule="auto"/></w:pPr>'
+        + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/><w:sz w:val="' + hp(13) + '"/><w:szCs w:val="' + hp(13) + '"/><w:color w:val="' + BLUE + '"/></w:rPr>'
         + '<w:t xml:space="preserve">' + xmlEsc(b.text) + '</w:t></w:r></w:p>';
-
     } else if (b.type === 'divider') {
-      xml += '<w:p><w:pPr>'
-        + '<w:spacing w:before="' + tw(6) + '" w:after="' + tw(6) + '" w:line="240" w:lineRule="auto"/>'
-        + '<w:pBdr><w:bottom w:val="single" w:sz="4" w:space="1" w:color="' + BLUE + '"/></w:pBdr>'
-        + '</w:pPr></w:p>';
-
+      xml += '<w:p><w:pPr><w:spacing w:before="' + tw(6) + '" w:after="' + tw(6) + '" w:line="240" w:lineRule="auto"/>'
+        + '<w:pBdr><w:bottom w:val="single" w:sz="4" w:space="1" w:color="' + BLUE + '"/></w:pBdr></w:pPr></w:p>';
     } else if (b.type === 'callout') {
-      xml += '<w:p><w:pPr>'
-        + '<w:spacing w:before="' + tw(4) + '" w:after="' + tw(4) + '" w:line="240" w:lineRule="auto"/>'
-        + '<w:ind w:left="' + Math.round(TWIP_INCH * 0.4) + '"/>'
-        + '</w:pPr>'
-        + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
-        + '<w:b/><w:bCs/><w:sz w:val="' + hp(13) + '"/><w:szCs w:val="' + hp(13) + '"/>'
-        + '<w:color w:val="' + BLUE + '"/></w:rPr>'
+      xml += '<w:p><w:pPr><w:spacing w:before="' + tw(4) + '" w:after="' + tw(4) + '" w:line="240" w:lineRule="auto"/>'
+        + '<w:ind w:left="' + Math.round(TWIP_INCH * 0.4) + '"/></w:pPr>'
+        + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/><w:sz w:val="' + hp(13) + '"/><w:szCs w:val="' + hp(13) + '"/><w:color w:val="' + BLUE + '"/></w:rPr>'
         + '<w:t xml:space="preserve">' + xmlEsc(b.text) + '</w:t></w:r></w:p>';
-
     } else if (b.type === 'bullet') {
-      var bRunsXml = makeRuns(b.runs, hp(13), '000000');
-      xml += '<w:p><w:pPr><w:pStyle w:val="ListBullet"/>'
-        + '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>'
-        + '<w:spacing w:before="0" w:after="' + tw(6) + '" w:line="240" w:lineRule="auto"/>'
-        + '</w:pPr>' + bRunsXml + '</w:p>';
-
+      xml += '<w:p><w:pPr><w:pStyle w:val="ListBullet"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>'
+        + '<w:spacing w:before="0" w:after="' + tw(6) + '" w:line="240" w:lineRule="auto"/></w:pPr>'
+        + makeRuns(b.runs, hp(13), '000000') + '</w:p>';
     } else {
-      var pRunsXml = makeRuns(b.runs, hp(13), '000000');
-      xml += '<w:p><w:pPr>'
-        + '<w:spacing w:before="0" w:after="' + tw(6) + '" w:line="240" w:lineRule="auto"/>'
-        + '</w:pPr>' + pRunsXml + '</w:p>';
+      xml += '<w:p><w:pPr><w:spacing w:before="0" w:after="' + tw(6) + '" w:line="240" w:lineRule="auto"/></w:pPr>'
+        + makeRuns(b.runs, hp(13), '000000') + '</w:p>';
     }
   }
   return xml;
@@ -822,174 +652,42 @@ function makeBody(blocks) {
 function makeHeaderXml(title) {
   var clean = cleanTitle(title);
   var lines = splitTitle(clean);
-  var xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-    + '<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">';
-
+  var xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">';
   for (var i = 0; i < lines.length; i++) {
-    xml += '<w:p><w:pPr><w:jc w:val="center"/>'
-      + '<w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr>'
-      + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
-      + '<w:sz w:val="' + hp(16) + '"/><w:szCs w:val="' + hp(16) + '"/>'
-      + '<w:color w:val="' + BLUE + '"/></w:rPr>'
+    xml += '<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr>'
+      + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="' + hp(16) + '"/><w:szCs w:val="' + hp(16) + '"/><w:color w:val="' + BLUE + '"/></w:rPr>'
       + '<w:t xml:space="preserve">' + xmlEsc(lines[i]) + '</w:t></w:r></w:p>';
   }
-
-  xml += '<w:p><w:pPr><w:spacing w:after="' + tw(6) + '" w:line="240" w:lineRule="auto"/>'
-    + '<w:rPr><w:sz w:val="' + hp(1) + '"/><w:szCs w:val="' + hp(1) + '"/></w:rPr>'
-    + '</w:pPr></w:p></w:hdr>';
+  xml += '<w:p><w:pPr><w:spacing w:after="' + tw(6) + '" w:line="240" w:lineRule="auto"/><w:rPr><w:sz w:val="' + hp(1) + '"/><w:szCs w:val="' + hp(1) + '"/></w:rPr></w:pPr></w:p></w:hdr>';
   return xml;
 }
 
 function buildDocx(title, blocks) {
   var zip = new JSZip();
 
-  zip.file('[Content_Types].xml',
-    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-    + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
-    + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
-    + '<Default Extension="xml" ContentType="application/xml"/>'
-    + '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
-    + '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>'
-    + '<Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>'
-    + '<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>'
-    + '<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>'
-    + '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>'
-    + '</Types>'
-  );
+  zip.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/><Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/><Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/></Types>');
 
-  zip.file('_rels/.rels',
-    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-    + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-    + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
-    + '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>'
-    + '</Relationships>'
-  );
+  zip.file('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/></Relationships>');
 
-  zip.file('docProps/core.xml',
-    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-    + '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"'
-    + ' xmlns:dc="http://purl.org/dc/elements/1.1/"'
-    + ' xmlns:dcterms="http://purl.org/dc/terms/"'
-    + ' xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">'
-    + '<dc:title>' + xmlEsc(title) + '</dc:title>'
-    + '<dcterms:created xsi:type="dcterms:W3CDTF">' + new Date().toISOString() + '</dcterms:created>'
-    + '</cp:coreProperties>'
-  );
+  zip.file('docProps/core.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>' + xmlEsc(title) + '</dc:title><dcterms:created xsi:type="dcterms:W3CDTF">' + new Date().toISOString() + '</dcterms:created></cp:coreProperties>');
 
-  zip.file('word/_rels/document.xml.rels',
-    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-    + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-    + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
-    + '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>'
-    + '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>'
-    + '<Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>'
-    + '</Relationships>'
-  );
+  zip.file('word/_rels/document.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/><Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/></Relationships>');
 
-  zip.file('word/styles.xml',
-    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-    + '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
-    + '<w:docDefaults>'
-    + '<w:rPrDefault><w:rPr>'
-    + '<w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
-    + '<w:sz w:val="' + hp(13) + '"/><w:szCs w:val="' + hp(13) + '"/>'
-    + '<w:color w:val="000000"/>'
-    + '</w:rPr></w:rPrDefault>'
-    + '<w:pPrDefault><w:pPr>'
-    + '<w:spacing w:before="0" w:after="' + tw(6) + '" w:line="240" w:lineRule="auto"/>'
-    + '</w:pPr></w:pPrDefault>'
-    + '</w:docDefaults>'
-    + '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>'
-    + '<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/>'
-    + '<w:pPr><w:spacing w:before="' + tw(8) + '" w:after="' + tw(2) + '"/></w:pPr>'
-    + '<w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/>'
-    + '<w:sz w:val="' + hp(14) + '"/><w:szCs w:val="' + hp(14) + '"/><w:color w:val="' + BLUE + '"/></w:rPr></w:style>'
-    + '<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/>'
-    + '<w:pPr><w:spacing w:before="' + tw(8) + '" w:after="' + tw(2) + '"/></w:pPr>'
-    + '<w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/>'
-    + '<w:sz w:val="' + hp(13) + '"/><w:szCs w:val="' + hp(13) + '"/><w:color w:val="' + BLUE + '"/></w:rPr></w:style>'
-    + '<w:style w:type="paragraph" w:styleId="ListBullet"><w:name w:val="List Bullet"/>'
-    + '<w:pPr><w:spacing w:before="0" w:after="' + tw(6) + '"/></w:pPr>'
-    + '<w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
-    + '<w:sz w:val="' + hp(13) + '"/><w:szCs w:val="' + hp(13) + '"/></w:rPr></w:style>'
-    + '</w:styles>'
-  );
+  zip.file('word/styles.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="' + hp(13) + '"/><w:szCs w:val="' + hp(13) + '"/><w:color w:val="000000"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:before="0" w:after="' + tw(6) + '" w:line="240" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:pPr><w:spacing w:before="' + tw(8) + '" w:after="' + tw(2) + '"/></w:pPr><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/><w:sz w:val="' + hp(14) + '"/><w:szCs w:val="' + hp(14) + '"/><w:color w:val="' + BLUE + '"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:pPr><w:spacing w:before="' + tw(8) + '" w:after="' + tw(2) + '"/></w:pPr><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/><w:sz w:val="' + hp(13) + '"/><w:szCs w:val="' + hp(13) + '"/><w:color w:val="' + BLUE + '"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="ListBullet"><w:name w:val="List Bullet"/><w:pPr><w:spacing w:before="0" w:after="' + tw(6) + '"/></w:pPr><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="' + hp(13) + '"/><w:szCs w:val="' + hp(13) + '"/></w:rPr></w:style></w:styles>');
 
-  zip.file('word/numbering.xml',
-    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-    + '<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
-    + '<w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0">'
-    + '<w:start w:val="1"/><w:numFmt w:val="bullet"/>'
-    + '<w:lvlText w:val="&#xF0B7;"/><w:lvlJc w:val="left"/>'
-    + '<w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr>'
-    + '<w:rPr><w:rFonts w:ascii="Symbol" w:hAnsi="Symbol" w:hint="default"/></w:rPr>'
-    + '</w:lvl></w:abstractNum>'
-    + '<w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>'
-    + '</w:numbering>'
-  );
+  zip.file('word/numbering.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="&#xF0B7;"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr><w:rPr><w:rFonts w:ascii="Symbol" w:hAnsi="Symbol" w:hint="default"/></w:rPr></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num></w:numbering>');
 
   zip.file('word/header1.xml', makeHeaderXml(title));
 
   var now = new Date();
-  var mm = String(now.getMonth() + 1).padStart(2, '0');
-  var dd = String(now.getDate()).padStart(2, '0');
-  var yy = String(now.getFullYear()).slice(-2);
-  var dateStr = mm + '/' + dd + '/' + yy;
+  var dateStr = String(now.getMonth() + 1).padStart(2, '0') + '/' + String(now.getDate()).padStart(2, '0') + '/' + String(now.getFullYear()).slice(-2);
 
-  zip.file('word/footer1.xml',
-    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-    + '<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
-    + '<w:p><w:pPr>'
-    + '<w:tabs><w:tab w:val="right" w:pos="' + (12240 - MARGIN * 2) + '"/></w:tabs>'
-    + '</w:pPr>'
-    + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
-    + '<w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr>'
-    + '<w:t xml:space="preserve">' + dateStr + '</w:t></w:r>'
-    + '<w:r><w:tab/></w:r>'
-    + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
-    + '<w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr>'
-    + '<w:fldChar w:fldCharType="begin"/></w:r>'
-    + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
-    + '<w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr>'
-    + '<w:instrText xml:space="preserve"> PAGE </w:instrText></w:r>'
-    + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
-    + '<w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr>'
-    + '<w:fldChar w:fldCharType="end"/></w:r>'
-    + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
-    + '<w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr>'
-    + '<w:t xml:space="preserve"> of </w:t></w:r>'
-    + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
-    + '<w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr>'
-    + '<w:fldChar w:fldCharType="begin"/></w:r>'
-    + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
-    + '<w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr>'
-    + '<w:instrText xml:space="preserve"> NUMPAGES </w:instrText></w:r>'
-    + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
-    + '<w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr>'
-    + '<w:fldChar w:fldCharType="end"/></w:r>'
-    + '</w:p></w:ftr>'
-  );
+  zip.file('word/footer1.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:pPr><w:tabs><w:tab w:val="right" w:pos="' + (12240 - MARGIN * 2) + '"/></w:tabs></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr><w:t xml:space="preserve">' + dateStr + '</w:t></w:r><w:r><w:tab/></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr><w:fldChar w:fldCharType="end"/></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr><w:t xml:space="preserve"> of </w:t></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr><w:instrText xml:space="preserve"> NUMPAGES </w:instrText></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr><w:fldChar w:fldCharType="end"/></w:r></w:p></w:ftr>');
 
   var bodyXml = makeBody(blocks);
-  zip.file('word/document.xml',
-    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-    + '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
-    + ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
-    + '<w:body>' + bodyXml
-    + '<w:sectPr>'
-    + '<w:headerReference w:type="default" r:id="rId3"/>'
-    + '<w:footerReference w:type="default" r:id="rId4"/>'
-    + '<w:pgSz w:w="12240" w:h="15840"/>'
-    + '<w:pgMar w:top="' + MARGIN + '" w:right="' + MARGIN + '" w:bottom="' + MARGIN + '" w:left="' + MARGIN + '"'
-    + ' w:header="' + HDR_DIST + '" w:footer="' + FTR_DIST + '"/>'
-    + '</w:sectPr>'
-    + '</w:body></w:document>'
-  );
+  zip.file('word/document.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>' + bodyXml + '<w:sectPr><w:headerReference w:type="default" r:id="rId3"/><w:footerReference w:type="default" r:id="rId4"/><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="' + MARGIN + '" w:right="' + MARGIN + '" w:bottom="' + MARGIN + '" w:left="' + MARGIN + '" w:header="' + HDR_DIST + '" w:footer="' + FTR_DIST + '"/></w:sectPr></w:body></w:document>');
 
-  return zip.generateAsync({
-    type: 'blob',
-    mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-  });
+  return zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
 }
 </script>
 </body>
