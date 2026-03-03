@@ -644,9 +644,9 @@ function makeBody(blocks) {
 
     if (b.type === 'h1') {
       /* Extra space before H1 (except first element) */
-      var beforeH1 = (i === 0) ? '0' : '' + tw(18);
+      var beforeH1 = (i === 0) ? '0' : '' + tw(8);
       xml += '<w:p><w:pPr><w:pStyle w:val="Heading1"/>'
-        + '<w:spacing w:before="' + beforeH1 + '" w:after="' + tw(12) + '" w:line="240" w:lineRule="auto"/>'
+        + '<w:spacing w:before="' + beforeH1 + '" w:after="' + tw(2) + '" w:line="240" w:lineRule="auto"/>'
         + '</w:pPr>'
         + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
         + '<w:b/><w:bCs/><w:sz w:val="' + hp(14) + '"/><w:szCs w:val="' + hp(14) + '"/>'
@@ -655,9 +655,9 @@ function makeBody(blocks) {
 
     } else if (b.type === 'h2') {
       /* Extra space before H2 */
-      var beforeH2 = (i === 0) ? '0' : '' + tw(12);
+      var beforeH2 = (i === 0) ? '0' : '' + tw(8);
       xml += '<w:p><w:pPr><w:pStyle w:val="Heading2"/>'
-        + '<w:spacing w:before="' + beforeH2 + '" w:after="' + tw(8) + '" w:line="240" w:lineRule="auto"/>'
+        + '<w:spacing w:before="' + beforeH2 + '" w:after="' + tw(2) + '" w:line="240" w:lineRule="auto"/>'
         + '</w:pPr>'
         + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
         + '<w:b/><w:bCs/><w:sz w:val="' + hp(13) + '"/><w:szCs w:val="' + hp(13) + '"/>'
@@ -808,9 +808,9 @@ function buildDocx(title, blocks) {
     + '<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
     + '<w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0">'
     + '<w:start w:val="1"/><w:numFmt w:val="bullet"/>'
-    + '<w:lvlText w:val="\uF0B7"/><w:lvlJc w:val="left"/>'
+    + '<w:lvlText w:val="&#xF0B7;"/><w:lvlJc w:val="left"/>'
     + '<w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr>'
-    + '<w:rPr><w:rFonts w:ascii="Symbol" w:hAnsi="Symbol" w:cs="Symbol" w:hint="default"/></w:rPr>'
+    + '<w:rPr><w:rFonts w:ascii="Symbol" w:hAnsi="Symbol" w:hint="default"/></w:rPr>'
     + '</w:lvl></w:abstractNum>'
     + '<w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>'
     + '</w:numbering>'
