@@ -238,9 +238,18 @@ buildBtn.addEventListener('click', function () {
 
   var title   = cleanTitle(titleInput.value.trim());
   var content = getContent();
-  if (!content.text.trim() || !title) return;
+  if (!content.text.trim() || !title) {
+    statusEl.className = 'status err';
+    statusEl.textContent = 'Error: Please enter both a title and text.';
+    return;
+  }
 
   var blocks = content.blocks;
+  if (!blocks || blocks.length === 0) {
+    statusEl.className = 'status err';
+    statusEl.textContent = 'Error: Could not parse any content from the text.';
+    return;
+  }
 
   buildDocx(title, blocks).then(function (blob) {
     var fn = title.replace(/[^a-zA-Z0-9 ]/g, '').replace(/\s+/g, '_').substring(0, 50) + '.docx';
