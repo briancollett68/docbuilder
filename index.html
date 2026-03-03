@@ -25,7 +25,7 @@ h1 { font-size: 1.6rem; color: #93c5fd; margin-bottom: 4px; text-align: center; 
 .container { width: 100%; max-width: 800px; display: flex; flex-direction: column; gap: 16px; }
 label { font-size: 0.85rem; color: #94a3b8; font-weight: 700; }
 
-textarea {
+#textInput {
   width: 100%;
   min-height: 340px;
   background: #1e293b;
@@ -35,11 +35,14 @@ textarea {
   font-family: 'Lexend', sans-serif;
   font-size: 0.9rem;
   padding: 14px;
-  resize: vertical;
   outline: none;
   transition: border 0.2s;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-wrap: break-word;
 }
-textarea:focus { border-color: #3b82f6; }
+#textInput:focus { border-color: #3b82f6; }
+#textInput b, #textInput strong { color: #e2e8f0; font-weight: 700; }
 
 .title-row { display: flex; gap: 10px; align-items: center; }
 
@@ -58,6 +61,15 @@ textarea:focus { border-color: #3b82f6; }
 .title-row input:focus { border-color: #3b82f6; }
 
 .char-count { font-size: 0.7rem; color: #64748b; white-space: nowrap; }
+.source-badge {
+  font-size: 0.7rem;
+  padding: 3px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  display: none;
+}
+.source-md { color: #3b82f6; background: #1e3a5f; }
+.source-rich { color: #a78bfa; background: #2e1065; }
 
 button {
   padding: 14px 28px;
@@ -86,14 +98,16 @@ button {
   padding: 14px;
   font-size: 0.8rem;
   color: #94a3b8;
-  max-height: 160px;
+  max-height: 200px;
   overflow-y: auto;
   line-height: 1.5;
 }
 .preview b { color: #93c5fd; }
-.preview .h1 { color: #60a5fa; font-weight: 700; font-size: 0.95rem; }
+.preview .h1 { color: #60a5fa; font-weight: 700; font-size: 0.95rem; margin-top: 6px; }
 .preview .h2 { color: #60a5fa; font-weight: 700; font-size: 0.88rem; padding-left: 6px; }
 .preview .bullet { padding-left: 20px; }
+.preview .callout { padding-left: 16px; color: #818cf8; font-weight: 700; }
+.preview .divider { color: #475569; font-size: 0.7rem; margin: 4px 0; }
 
 .title-preview {
   background: #1e293b;
@@ -107,16 +121,21 @@ button {
   display: none;
 }
 .title-preview span { color: #64748b; font-size: 0.7rem; display: block; margin-bottom: 4px; }
+
+.input-hint {
+  font-size: 0.7rem;
+  color: #475569;
+  margin-top: 4px;
+}
 </style>
 </head>
 <body>
 
 <h1>ChatGPT &#8594; Word Document</h1>
-<p class="subtitle">Paste ChatGPT output below. Markdown headings &amp; bullets are auto-detected.</p>
+<p class="subtitle">Paste ChatGPT output or formatted text below. Bold formatting is preserved.</p>
 
 <div class="container">
 
-  <!-- Title input -->
   <div>
     <label>Document Title (used in header — splits every 40 characters)</label>
     <div class="title-row" style="margin-top:6px">
@@ -126,47 +145,67 @@ button {
     <div class="title-preview" id="titlePreview"><span>Header preview:</span></div>
   </div>
 
-  <!-- Text input -->
   <div>
-    <label>Paste ChatGPT Text</label>
-    <textarea id="textInput" placeholder="Paste your ChatGPT output here…"></textarea>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+      <label>Paste Your Text</label>
+      <span class="source-badge source-md" id="mdBadge">Markdown detected</span>
+      <span class="source-badge source-rich" id="richBadge">Rich formatting detected</span>
+    </div>
+    <div id="textInput" contenteditable="true"></div>
+    <div class="input-hint">Supports: ChatGPT markdown, rich text (Word, Docs, email). Quotes in "…" become blue bold callouts.</div>
   </div>
 
-  <!-- Structure preview -->
   <div id="previewBox" class="preview" style="display:none"></div>
 
-  <!-- Generate button -->
   <button class="btn-primary" id="buildBtn" disabled>Generate .docx</button>
   <div class="status" id="status"></div>
 
 </div>
 
-<!-- JSZip library for building .docx files -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
 <script>
 /* ============================================================
    ELEMENT REFERENCES
    ============================================================ */
-var textArea     = document.getElementById('textInput');
+var textInput    = document.getElementById('textInput');
 var titleInput   = document.getElementById('titleInput');
 var buildBtn     = document.getElementById('buildBtn');
 var statusEl     = document.getElementById('status');
 var previewBox   = document.getElementById('previewBox');
 var charCount    = document.getElementById('charCount');
 var titlePreview = document.getElementById('titlePreview');
+var mdBadge      = document.getElementById('mdBadge');
+var richBadge    = document.getElementById('richBadge');
+
+var debounceTimer = null;
 
 /* ============================================================
    EVENT LISTENERS
    ============================================================ */
-textArea.addEventListener('input', function () {
+textInput.addEventListener('input', function () {
   checkReady();
-  var v = textArea.value.trim();
-  if (v) {
-    parseAndPreview(v);
-  } else {
-    previewBox.style.display = 'none';
-  }
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(function () {
+    var content = getContent();
+    if (content.text.trim()) {
+      parseAndPreview(content);
+    } else {
+      previewBox.style.display = 'none';
+      mdBadge.style.display = 'none';
+      richBadge.style.display = 'none';
+    }
+  }, 300);
+});
+
+textInput.addEventListener('paste', function () {
+  setTimeout(function () {
+    var content = getContent();
+    if (content.text.trim()) {
+      parseAndPreview(content);
+      checkReady();
+    }
+  }, 100);
 });
 
 titleInput.addEventListener('input', function () {
@@ -188,19 +227,17 @@ titleInput.addEventListener('input', function () {
 
 buildBtn.addEventListener('click', function () {
   statusEl.className = 'status loading';
-  statusEl.textContent = 'Building document…';
+  statusEl.textContent = 'Building document\u2026';
 
-  var raw   = textArea.value.trim();
-  var title = titleInput.value.trim();
-  if (!raw || !title) return;
+  var title   = titleInput.value.trim();
+  var content = getContent();
+  if (!content.text.trim() || !title) return;
 
-  var blocks = parseParagraphs(raw);
+  var blocks = content.blocks;
 
   buildDocx(title, blocks).then(function (blob) {
     var fn = title.replace(/[^a-zA-Z0-9 ]/g, '').replace(/\s+/g, '_').substring(0, 50) + '.docx';
-
-    // Create a hidden download link and click it
-    var a  = document.createElement('a');
+    var a   = document.createElement('a');
     var url = URL.createObjectURL(blob);
     a.href = url;
     a.download = fn;
@@ -222,7 +259,9 @@ buildBtn.addEventListener('click', function () {
    HELPERS
    ============================================================ */
 function checkReady() {
-  buildBtn.disabled = !(textArea.value.trim() && titleInput.value.trim());
+  var hasText  = textInput.textContent.trim().length > 0;
+  var hasTitle = titleInput.value.trim().length > 0;
+  buildBtn.disabled = !(hasText && hasTitle);
 }
 
 function esc(s) {
@@ -233,21 +272,43 @@ function xmlEsc(s) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-/* Split title into lines of max 30 chars at word boundaries */
+/* ============================================================
+   SMART TITLE SPLITTING
+   Keeps logical phrases together (prepositions, articles stay
+   with the next word; doesn't break "Long-Term Investors", etc.)
+   ============================================================ */
+var KEEP_WITH_NEXT = ['for', 'the', 'a', 'an', 'and', 'or', 'of', 'in', 'on', 'at', 'to', 'by', 'with', 'from', 'as', 'is', 'its', 'not', 'but', 'nor', 'per', 'via'];
+
 function splitTitle(title) {
   if (title.length <= 40) return [title];
   var words = title.split(/\s+/);
   var lines = [];
   var current = '';
+
   for (var i = 0; i < words.length; i++) {
     var w = words[i];
-    if (!current) {
-      current = w;
-    } else if ((current + ' ' + w).length <= 40) {
-      current += ' ' + w;
+    var test = current ? current + ' ' + w : w;
+
+    if (test.length <= 40) {
+      current = test;
     } else {
-      lines.push(current);
-      current = w;
+      /* Before pushing, check if current line ends with a short preposition/article */
+      /* If so, move that word to the next line */
+      if (current) {
+        var parts = current.split(/\s+/);
+        var lastWord = parts[parts.length - 1].toLowerCase();
+        if (parts.length > 1 && KEEP_WITH_NEXT.indexOf(lastWord) !== -1) {
+          var moved = parts.pop();
+          current = parts.join(' ');
+          lines.push(current);
+          current = moved + ' ' + w;
+        } else {
+          lines.push(current);
+          current = w;
+        }
+      } else {
+        current = w;
+      }
     }
   }
   if (current) lines.push(current);
@@ -255,7 +316,171 @@ function splitTitle(title) {
 }
 
 /* ============================================================
-   MARKDOWN PARSING
+   CONTENT EXTRACTION — handles both rich text and markdown
+   ============================================================ */
+function getContent() {
+  var html = textInput.innerHTML;
+  var text = textInput.textContent || textInput.innerText || '';
+
+  var hasRichBold = /<(b|strong)[^>]*>/i.test(html);
+  var hasMarkdown = /\*\*[^*]+\*\*/.test(text) || /^#{1,6}\s/m.test(text) || /^[-*]\s/m.test(text);
+
+  if (hasRichBold) {
+    mdBadge.style.display = 'none';
+    richBadge.style.display = 'inline';
+  } else if (hasMarkdown) {
+    mdBadge.style.display = 'inline';
+    richBadge.style.display = 'none';
+  } else {
+    mdBadge.style.display = 'none';
+    richBadge.style.display = 'none';
+  }
+
+  var blocks;
+  if (hasRichBold && !hasMarkdown) {
+    blocks = parseRichHTML(html);
+  } else {
+    blocks = parseParagraphs(text);
+  }
+
+  return { text: text, blocks: blocks };
+}
+
+/* ============================================================
+   RICH HTML PARSER
+   ============================================================ */
+function parseRichHTML(html) {
+  var temp = document.createElement('div');
+  temp.innerHTML = html;
+  var blocks = [];
+  var children = temp.childNodes;
+
+  for (var i = 0; i < children.length; i++) {
+    var node = children[i];
+    var tagName = (node.tagName || '').toUpperCase();
+
+    if (node.nodeType === 3 && !node.textContent.trim()) continue;
+
+    if (tagName === 'H1') {
+      blocks.push({ type: 'h1', text: node.textContent.trim(), runs: [{ t: node.textContent.trim(), b: true }] });
+      continue;
+    }
+    if (tagName === 'H2' || tagName === 'H3') {
+      blocks.push({ type: 'h2', text: node.textContent.trim(), runs: [{ t: node.textContent.trim(), b: true }] });
+      continue;
+    }
+
+    if (tagName === 'UL' || tagName === 'OL') {
+      var items = node.querySelectorAll('li');
+      for (var j = 0; j < items.length; j++) {
+        var runs = extractRuns(items[j]);
+        blocks.push({ type: 'bullet', text: items[j].textContent.trim(), runs: runs });
+      }
+      continue;
+    }
+
+    var el = (node.nodeType === 3) ? null : node;
+    var runs;
+    if (el) {
+      runs = extractRuns(el);
+    } else {
+      var t = node.textContent.trim();
+      if (!t) continue;
+      runs = [{ t: t, b: false }];
+    }
+
+    var fullText = '';
+    for (var k = 0; k < runs.length; k++) fullText += runs[k].t;
+    fullText = fullText.trim();
+    if (!fullText) continue;
+
+    /* Check for divider lines */
+    if (isDivider(fullText)) {
+      blocks.push({ type: 'divider' });
+      continue;
+    }
+
+    /* Check for quoted callout */
+    if (isQuotedLine(fullText)) {
+      var cleaned = fullText.replace(/^[\u201C\u201D"]+|[\u201C\u201D"]+$/g, '').trim();
+      blocks.push({ type: 'callout', text: cleaned, runs: [{ t: cleaned, b: true }] });
+      continue;
+    }
+
+    var allBold = true;
+    for (var k = 0; k < runs.length; k++) {
+      if (runs[k].t.trim() && !runs[k].b) { allBold = false; break; }
+    }
+
+    if (allBold && fullText.length < 120) {
+      blocks.push({ type: 'h2', text: fullText, runs: runs });
+    } else {
+      blocks.push({ type: 'body', text: fullText, runs: runs });
+    }
+  }
+
+  return blocks;
+}
+
+function extractRuns(el) {
+  var runs = [];
+  walkNodes(el, false, runs);
+  var merged = [];
+  for (var i = 0; i < runs.length; i++) {
+    if (merged.length > 0 && merged[merged.length - 1].b === runs[i].b) {
+      merged[merged.length - 1].t += runs[i].t;
+    } else {
+      merged.push({ t: runs[i].t, b: runs[i].b });
+    }
+  }
+  return merged;
+}
+
+function walkNodes(node, isBold, runs) {
+  if (node.nodeType === 3) {
+    var t = node.textContent;
+    if (t) runs.push({ t: t, b: isBold });
+    return;
+  }
+  var tag = (node.tagName || '').toUpperCase();
+  var bold = isBold || tag === 'B' || tag === 'STRONG';
+  if (!bold && node.style && (node.style.fontWeight === 'bold' || node.style.fontWeight === '700')) {
+    bold = true;
+  }
+  var children = node.childNodes;
+  for (var i = 0; i < children.length; i++) {
+    walkNodes(children[i], bold, runs);
+  }
+}
+
+/* ============================================================
+   DETECTION HELPERS
+   ============================================================ */
+/* Detect horizontal rule / divider lines */
+function isDivider(text) {
+  var t = text.trim();
+  if (t.length === 0) return false;
+  /* Long dash lines, underscores, equals, or unicode horizontal bars */
+  if (/^[\u2500-\u257F\u2014\u2015\u2012\u2013—–\-_=*]{3,}$/.test(t)) return true;
+  if (/^[-_=*]{3,}$/.test(t)) return true;
+  return false;
+}
+
+/* Detect quoted callout lines — starts and ends with quotes */
+function isQuotedLine(text) {
+  var t = text.trim();
+  /* Standard quotes */
+  if ((t.charAt(0) === '"' && t.charAt(t.length - 1) === '"') ||
+      (t.charAt(0) === '\u201C' && t.charAt(t.length - 1) === '\u201D') ||
+      (t.charAt(0) === '"' && t.charAt(t.length - 1) === '\u201D') ||
+      (t.charAt(0) === '\u201C' && t.charAt(t.length - 1) === '"')) {
+    return true;
+  }
+  return false;
+}
+
+/* ============================================================
+   MARKDOWN PARSER
    ============================================================ */
 function cleanInline(s) {
   s = s.replace(/\*\*\*(.+?)\*\*\*/g, '$1');
@@ -268,7 +493,6 @@ function cleanInline(s) {
   return s.trim();
 }
 
-/* Parse bold markers into separate text runs */
 function parseInlineRuns(s) {
   s = s.replace(/\*\*\*(.+?)\*\*\*/g, '**$1**');
   var runs = [];
@@ -291,7 +515,6 @@ function parseInlineRuns(s) {
   return runs;
 }
 
-/* Parse raw text into structured blocks */
 function parseParagraphs(raw) {
   var t = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n{3,}/g, '\n\n');
   var lines = t.split('\n');
@@ -302,68 +525,94 @@ function parseParagraphs(raw) {
     var tr = lines[i].trim();
     if (!tr) { i++; continue; }
 
-    // Heading with #
+    /* Divider lines */
+    if (isDivider(tr)) {
+      blocks.push({ type: 'divider' });
+      i++; continue;
+    }
+
+    /* Heading with # */
     var hM = tr.match(/^(#{1,6})\s+(.*)/);
     if (hM) {
       var lv = hM[1].length;
-      blocks.push({ type: lv <= 1 ? 'h1' : 'h2', text: cleanInline(hM[2]), raw: hM[2] });
+      var tx = cleanInline(hM[2]);
+      blocks.push({ type: lv <= 1 ? 'h1' : 'h2', text: tx, runs: [{ t: tx, b: true }] });
       i++; continue;
     }
 
-    // Bold-only line as heading
+    /* Bold-only line as heading */
     var bL = tr.match(/^\*\*(.+?)\*\*$/);
     if (bL && tr.length < 120) {
-      blocks.push({ type: 'h2', text: cleanInline(bL[1]), raw: bL[1] });
+      var tx = cleanInline(bL[1]);
+      blocks.push({ type: 'h2', text: tx, runs: [{ t: tx, b: true }] });
       i++; continue;
     }
 
-    // Bullet
-    var buM = tr.match(/^[-*\u2022]\s+(.*)/);
+    /* Quoted callout line */
+    if (isQuotedLine(tr)) {
+      var cleaned = tr.replace(/^[\u201C\u201D"*]+|[\u201C\u201D"*]+$/g, '').trim();
+      blocks.push({ type: 'callout', text: cleaned, runs: [{ t: cleaned, b: true }] });
+      i++; continue;
+    }
+
+    /* Bullet (handles tab-indented bullets too) */
+    var buM = tr.match(/^[\t ]*[-*\u2022]\s+(.*)/);
     if (buM) {
-      blocks.push({ type: 'bullet', text: cleanInline(buM[1]), raw: buM[1] });
+      blocks.push({ type: 'bullet', text: cleanInline(buM[1]), runs: parseInlineRuns(buM[1]) });
       i++; continue;
     }
 
-    // Numbered list
-    var nM = tr.match(/^\d+[.\)]\s+(.*)/);
+    /* Numbered list */
+    var nM = tr.match(/^[\t ]*\d+[.\)]\s+(.*)/);
     if (nM) {
-      blocks.push({ type: 'bullet', text: cleanInline(nM[1]), raw: nM[1] });
+      blocks.push({ type: 'bullet', text: cleanInline(nM[1]), runs: parseInlineRuns(nM[1]) });
       i++; continue;
     }
 
-    // Normal paragraph — collect continuation lines
+    /* Normal paragraph */
     var para = tr;
-    var rp = tr;
     i++;
     while (i < lines.length && lines[i].trim() &&
-           !lines[i].trim().match(/^(#{1,6}\s|[-*\u2022]\s|\d+[.\)]\s|\*\*.+\*\*$)/)) {
+           !isDivider(lines[i].trim()) &&
+           !isQuotedLine(lines[i].trim()) &&
+           !lines[i].trim().match(/^(#{1,6}\s|[\t ]*[-*\u2022]\s|[\t ]*\d+[.\)]\s|\*\*.+\*\*$)/)) {
       para += ' ' + lines[i].trim();
-      rp   += ' ' + lines[i].trim();
       i++;
     }
-    blocks.push({ type: 'body', text: cleanInline(para), raw: rp });
+    blocks.push({ type: 'body', text: cleanInline(para), runs: parseInlineRuns(para) });
   }
 
   return blocks;
 }
 
-/* Show structure preview */
-function parseAndPreview(raw) {
-  var blocks = parseParagraphs(raw);
+/* ============================================================
+   PREVIEW
+   ============================================================ */
+function parseAndPreview(content) {
+  var blocks = content.blocks;
   var html = '<b>Structure Preview:</b><br>';
   for (var i = 0; i < blocks.length; i++) {
     var b = blocks[i];
-    if (b.type === 'h1')          html += '<div class="h1">H1: ' + esc(b.text) + '</div>';
-    else if (b.type === 'h2')     html += '<div class="h2">H2: ' + esc(b.text) + '</div>';
-    else if (b.type === 'bullet') html += '<div class="bullet">\u2022 ' + esc(b.text.substring(0, 80)) + (b.text.length > 80 ? '\u2026' : '') + '</div>';
-    else                          html += '<div>' + esc(b.text.substring(0, 90)) + (b.text.length > 90 ? '\u2026' : '') + '</div>';
+    if (b.type === 'h1') {
+      html += '<div class="h1">H1: ' + esc(b.text) + '</div>';
+    } else if (b.type === 'h2') {
+      html += '<div class="h2">H2: ' + esc(b.text) + '</div>';
+    } else if (b.type === 'divider') {
+      html += '<div class="divider">\u2500\u2500\u2500 section break \u2500\u2500\u2500</div>';
+    } else if (b.type === 'callout') {
+      html += '<div class="callout">\u275D ' + esc(b.text) + '</div>';
+    } else if (b.type === 'bullet') {
+      html += '<div class="bullet">\u2022 ' + esc(b.text.substring(0, 80)) + (b.text.length > 80 ? '\u2026' : '') + '</div>';
+    } else {
+      html += '<div>' + esc(b.text.substring(0, 90)) + (b.text.length > 90 ? '\u2026' : '') + '</div>';
+    }
   }
   previewBox.innerHTML = html;
   previewBox.style.display = 'block';
 }
 
 /* ============================================================
-   DOCX BUILDER — raw Open XML + JSZip
+   DOCX BUILDER
    ============================================================ */
 var TWIP_INCH = 1440;
 var BLUE      = '204C8D';
@@ -371,34 +620,33 @@ var MARGIN    = Math.round(TWIP_INCH * 0.5);
 var HDR_DIST  = Math.round(TWIP_INCH * 0.2);
 var FTR_DIST  = Math.round(TWIP_INCH * 0.2);
 
-function hp(pt) { return pt * 2; }   /* half-points (font size unit) */
-function tw(pt) { return pt * 20; }  /* twips (spacing unit) */
+function hp(pt) { return pt * 2; }
+function tw(pt) { return pt * 20; }
 
-/* Build Word XML runs from parsed inline data */
-function makeRuns(runs, sz, color, bold) {
+function makeRuns(runs, sz, color) {
   var xml = '';
   for (var i = 0; i < runs.length; i++) {
     var r = runs[i];
-    var isBold = r.b || bold;
     xml += '<w:r><w:rPr>'
       + '<w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
       + '<w:sz w:val="' + sz + '"/><w:szCs w:val="' + sz + '"/>'
       + '<w:color w:val="' + color + '"/>'
-      + (isBold ? '<w:b/><w:bCs/>' : '')
+      + (r.b ? '<w:b/><w:bCs/>' : '')
       + '</w:rPr><w:t xml:space="preserve">' + xmlEsc(r.t) + '</w:t></w:r>';
   }
   return xml;
 }
 
-/* Build document body XML from blocks */
 function makeBody(blocks) {
   var xml = '';
   for (var i = 0; i < blocks.length; i++) {
     var b = blocks[i];
 
     if (b.type === 'h1') {
+      /* Extra space before H1 (except first element) */
+      var beforeH1 = (i === 0) ? '0' : '' + tw(18);
       xml += '<w:p><w:pPr><w:pStyle w:val="Heading1"/>'
-        + '<w:spacing w:before="0" w:after="' + tw(12) + '" w:line="240" w:lineRule="auto"/>'
+        + '<w:spacing w:before="' + beforeH1 + '" w:after="' + tw(12) + '" w:line="240" w:lineRule="auto"/>'
         + '</w:pPr>'
         + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
         + '<w:b/><w:bCs/><w:sz w:val="' + hp(14) + '"/><w:szCs w:val="' + hp(14) + '"/>'
@@ -406,8 +654,28 @@ function makeBody(blocks) {
         + '<w:t xml:space="preserve">' + xmlEsc(b.text) + '</w:t></w:r></w:p>';
 
     } else if (b.type === 'h2') {
+      /* Extra space before H2 */
+      var beforeH2 = (i === 0) ? '0' : '' + tw(12);
       xml += '<w:p><w:pPr><w:pStyle w:val="Heading2"/>'
-        + '<w:spacing w:before="0" w:after="' + tw(12) + '" w:line="240" w:lineRule="auto"/>'
+        + '<w:spacing w:before="' + beforeH2 + '" w:after="' + tw(8) + '" w:line="240" w:lineRule="auto"/>'
+        + '</w:pPr>'
+        + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
+        + '<w:b/><w:bCs/><w:sz w:val="' + hp(13) + '"/><w:szCs w:val="' + hp(13) + '"/>'
+        + '<w:color w:val="' + BLUE + '"/></w:rPr>'
+        + '<w:t xml:space="preserve">' + xmlEsc(b.text) + '</w:t></w:r></w:p>';
+
+    } else if (b.type === 'divider') {
+      /* Section break — extra vertical space */
+      xml += '<w:p><w:pPr>'
+        + '<w:spacing w:before="' + tw(6) + '" w:after="' + tw(6) + '" w:line="240" w:lineRule="auto"/>'
+        + '<w:pBdr><w:bottom w:val="single" w:sz="4" w:space="1" w:color="' + BLUE + '"/></w:pBdr>'
+        + '</w:pPr></w:p>';
+
+    } else if (b.type === 'callout') {
+      /* Bold, blue, indented callout */
+      xml += '<w:p><w:pPr>'
+        + '<w:spacing w:before="' + tw(4) + '" w:after="' + tw(4) + '" w:line="240" w:lineRule="auto"/>'
+        + '<w:ind w:left="' + Math.round(TWIP_INCH * 0.4) + '"/>'
         + '</w:pPr>'
         + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
         + '<w:b/><w:bCs/><w:sz w:val="' + hp(13) + '"/><w:szCs w:val="' + hp(13) + '"/>'
@@ -415,23 +683,22 @@ function makeBody(blocks) {
         + '<w:t xml:space="preserve">' + xmlEsc(b.text) + '</w:t></w:r></w:p>';
 
     } else if (b.type === 'bullet') {
-      var bRuns = makeRuns(parseInlineRuns(b.raw), hp(13), '000000', false);
+      var bRunsXml = makeRuns(b.runs, hp(13), '000000');
       xml += '<w:p><w:pPr><w:pStyle w:val="ListBullet"/>'
         + '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>'
         + '<w:spacing w:before="0" w:after="' + tw(6) + '" w:line="240" w:lineRule="auto"/>'
-        + '</w:pPr>' + bRuns + '</w:p>';
+        + '</w:pPr>' + bRunsXml + '</w:p>';
 
     } else {
-      var pRuns = makeRuns(parseInlineRuns(b.raw), hp(13), '000000', false);
+      var pRunsXml = makeRuns(b.runs, hp(13), '000000');
       xml += '<w:p><w:pPr>'
         + '<w:spacing w:before="0" w:after="' + tw(6) + '" w:line="240" w:lineRule="auto"/>'
-        + '</w:pPr>' + pRuns + '</w:p>';
+        + '</w:pPr>' + pRunsXml + '</w:p>';
     }
   }
   return xml;
 }
 
-/* Build header XML — splits title into multiple centered lines */
 function makeHeaderXml(title) {
   var lines = splitTitle(title);
   var xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
@@ -446,19 +713,15 @@ function makeHeaderXml(title) {
       + '<w:t xml:space="preserve">' + xmlEsc(lines[i]) + '</w:t></w:r></w:p>';
   }
 
-  /* Spacer paragraph after title */
   xml += '<w:p><w:pPr><w:spacing w:after="' + tw(6) + '" w:line="240" w:lineRule="auto"/>'
     + '<w:rPr><w:sz w:val="' + hp(1) + '"/><w:szCs w:val="' + hp(1) + '"/></w:rPr>'
     + '</w:pPr></w:p></w:hdr>';
-
   return xml;
 }
 
-/* Assemble all XML parts into a .docx ZIP */
 function buildDocx(title, blocks) {
   var zip = new JSZip();
 
-  /* Content Types */
   zip.file('[Content_Types].xml',
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
     + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
@@ -473,7 +736,6 @@ function buildDocx(title, blocks) {
     + '</Types>'
   );
 
-  /* Package relationships */
   zip.file('_rels/.rels',
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
     + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
@@ -482,7 +744,6 @@ function buildDocx(title, blocks) {
     + '</Relationships>'
   );
 
-  /* Core properties (document title) */
   zip.file('docProps/core.xml',
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
     + '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"'
@@ -494,7 +755,6 @@ function buildDocx(title, blocks) {
     + '</cp:coreProperties>'
   );
 
-  /* Document relationships */
   zip.file('word/_rels/document.xml.rels',
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
     + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
@@ -505,7 +765,6 @@ function buildDocx(title, blocks) {
     + '</Relationships>'
   );
 
-  /* Styles */
   zip.file('word/styles.xml',
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
     + '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
@@ -535,7 +794,6 @@ function buildDocx(title, blocks) {
     + '</w:styles>'
   );
 
-  /* Numbering (bullet definition) */
   zip.file('word/numbering.xml',
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
     + '<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
@@ -549,31 +807,24 @@ function buildDocx(title, blocks) {
     + '</w:numbering>'
   );
 
-  /* Header */
   zip.file('word/header1.xml', makeHeaderXml(title));
 
-  /* Build today's date as MM/DD/YY */
   var now = new Date();
   var mm = String(now.getMonth() + 1).padStart(2, '0');
   var dd = String(now.getDate()).padStart(2, '0');
   var yy = String(now.getFullYear()).slice(-2);
   var dateStr = mm + '/' + dd + '/' + yy;
 
-  /* Footer with date on left, PAGE of NUMPAGES on right */
   zip.file('word/footer1.xml',
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
     + '<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
-    /* Use a tab stop to put date left and page numbers right */
     + '<w:p><w:pPr>'
     + '<w:tabs><w:tab w:val="right" w:pos="' + (12240 - MARGIN * 2) + '"/></w:tabs>'
     + '</w:pPr>'
-    /* Date on the left */
     + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
     + '<w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr>'
     + '<w:t xml:space="preserve">' + dateStr + '</w:t></w:r>'
-    /* Tab to push page numbers to the right */
     + '<w:r><w:tab/></w:r>'
-    /* PAGE field */
     + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
     + '<w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr>'
     + '<w:fldChar w:fldCharType="begin"/></w:r>'
@@ -583,11 +834,9 @@ function buildDocx(title, blocks) {
     + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
     + '<w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr>'
     + '<w:fldChar w:fldCharType="end"/></w:r>'
-    /* " of " */
     + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
     + '<w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr>'
     + '<w:t xml:space="preserve"> of </w:t></w:r>'
-    /* NUMPAGES field */
     + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
     + '<w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr>'
     + '<w:fldChar w:fldCharType="begin"/></w:r>'
@@ -600,7 +849,6 @@ function buildDocx(title, blocks) {
     + '</w:p></w:ftr>'
   );
 
-  /* Main document body */
   var bodyXml = makeBody(blocks);
   zip.file('word/document.xml',
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
