@@ -6,44 +6,123 @@
 <title>ChatGPT to Word Document Builder</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Lexend:wght@400;700&display=swap');
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Lexend',sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:24px}
-h1{font-size:1.6rem;color:#93c5fd;margin-bottom:4px;text-align:center}
-.subtitle{color:#64748b;font-size:.85rem;margin-bottom:20px;text-align:center}
-.container{width:100%;max-width:800px;display:flex;flex-direction:column;gap:16px}
-label{font-size:.85rem;color:#94a3b8;font-weight:700}
-textarea{width:100%;min-height:340px;background:#1e293b;border:1px solid #334155;border-radius:10px;color:#e2e8f0;font-family:'Lexend',sans-serif;font-size:.9rem;padding:14px;resize:vertical;outline:none;transition:border .2s}
-textarea:focus{border-color:#3b82f6}
-.title-row{display:flex;gap:10px;align-items:center}
-.title-row input{flex:1;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-family:'Lexend',sans-serif;font-size:.9rem;padding:10px 14px;outline:none;transition:border .2s}
-.title-row input:focus{border-color:#3b82f6}
-.char-count{font-size:.7rem;color:#64748b;white-space:nowrap}
-button{padding:14px 28px;font-family:'Lexend',sans-serif;font-size:1rem;font-weight:700;border:none;border-radius:10px;cursor:pointer;transition:all .2s}
-.btn-primary{background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;width:100%}
-.btn-primary:hover{transform:translateY(-1px);box-shadow:0 4px 20px rgba(59,130,246,.4)}
-.btn-primary:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none}
-.status{text-align:center;font-size:.85rem;min-height:1.2em}
-.status.ok{color:#4ade80}
-.status.err{color:#f87171}
-.status.loading{color:#facc15}
-.preview{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:14px;font-size:.8rem;color:#94a3b8;max-height:200px;overflow-y:auto;line-height:1.5}
-.preview b{color:#93c5fd}
-.preview .h1{color:#60a5fa;font-weight:700;font-size:.95rem;margin-top:6px}
-.preview .h2{color:#60a5fa;font-weight:700;font-size:.88rem;padding-left:6px}
-.preview .h3{color:#60a5fa;font-weight:700;font-size:.82rem;padding-left:12px}
-.preview .section{color:#60a5fa;font-weight:700;font-size:.95rem;border-bottom:1px solid #3b82f6;padding-bottom:2px;margin-top:6px}
-.preview .bullet{padding-left:20px}
-.preview .callout{padding-left:16px;color:#818cf8;font-weight:700}
-.preview .divider{color:#475569;font-size:.7rem;margin:4px 0}
-.title-preview{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:10px;text-align:center;font-size:.8rem;color:#60a5fa;line-height:1.6;display:none}
-.title-preview span{color:#64748b;font-size:.7rem;display:block;margin-bottom:4px}
-.input-hint{font-size:.7rem;color:#475569;margin-top:4px}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Lexend', sans-serif;
+  background: #0f172a;
+  color: #e2e8f0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px;
+}
+
+h1 { font-size: 1.6rem; color: #93c5fd; margin-bottom: 4px; text-align: center; }
+.subtitle { color: #64748b; font-size: 0.85rem; margin-bottom: 20px; text-align: center; }
+.container { width: 100%; max-width: 800px; display: flex; flex-direction: column; gap: 16px; }
+label { font-size: 0.85rem; color: #94a3b8; font-weight: 700; }
+
+#textInput {
+  width: 100%;
+  min-height: 340px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  color: #e2e8f0;
+  font-family: 'Lexend', sans-serif;
+  font-size: 0.9rem;
+  padding: 14px;
+  outline: none;
+  transition: border 0.2s;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+#textInput:focus { border-color: #3b82f6; }
+#textInput b, #textInput strong { color: #e2e8f0; font-weight: 700; }
+
+.title-row { display: flex; gap: 10px; align-items: center; }
+
+.title-row input {
+  flex: 1;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  color: #e2e8f0;
+  font-family: 'Lexend', sans-serif;
+  font-size: 0.9rem;
+  padding: 10px 14px;
+  outline: none;
+  transition: border 0.2s;
+}
+.title-row input:focus { border-color: #3b82f6; }
+
+.char-count { font-size: 0.7rem; color: #64748b; white-space: nowrap; }
+
+button {
+  padding: 14px 28px;
+  font-family: 'Lexend', sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-primary { background: linear-gradient(135deg, #3b82f6, #2563eb); color: #fff; width: 100%; }
+.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(59, 130, 246, 0.4); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+
+.status { text-align: center; font-size: 0.85rem; min-height: 1.2em; }
+.status.ok { color: #4ade80; }
+.status.err { color: #f87171; }
+.status.loading { color: #facc15; }
+
+.preview {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  padding: 14px;
+  font-size: 0.8rem;
+  color: #94a3b8;
+  max-height: 200px;
+  overflow-y: auto;
+  line-height: 1.5;
+}
+.preview b { color: #93c5fd; }
+.preview .h1 { color: #60a5fa; font-weight: 700; font-size: 0.95rem; margin-top: 6px; }
+.preview .h2 { color: #60a5fa; font-weight: 700; font-size: 0.88rem; padding-left: 6px; }
+.preview .bullet { padding-left: 20px; }
+.preview .callout { padding-left: 16px; color: #818cf8; font-weight: 700; }
+.preview .divider { color: #475569; font-size: 0.7rem; margin: 4px 0; }
+
+.title-preview {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 10px;
+  text-align: center;
+  font-size: 0.8rem;
+  color: #60a5fa;
+  line-height: 1.6;
+  display: none;
+}
+.title-preview span { color: #64748b; font-size: 0.7rem; display: block; margin-bottom: 4px; }
+
+.input-hint { font-size: 0.7rem; color: #475569; margin-top: 4px; }
 </style>
 </head>
 <body>
+
 <h1>ChatGPT &#8594; Word Document</h1>
-<p class="subtitle">Paste ChatGPT output below. Edit freely, then generate.</p>
+<p class="subtitle">Paste ChatGPT output or formatted text below. Bold formatting is preserved.</p>
+
 <div class="container">
+
   <div>
     <label>Document Title (used in header)</label>
     <div class="title-row" style="margin-top:6px">
@@ -52,287 +131,320 @@ button{padding:14px 28px;font-family:'Lexend',sans-serif;font-size:1rem;font-wei
     </div>
     <div class="title-preview" id="titlePreview"><span>Header preview:</span></div>
   </div>
+
   <div>
-    <label>Paste Your Text (you can edit after pasting)</label>
-    <textarea id="textInput" placeholder="Paste your ChatGPT output here. You can delete or edit lines before generating."></textarea>
-    <div class="input-hint">Supports ## headings, **bold**, - bullets, numbered lists, and "quoted callouts".</div>
+    <label>Paste Your Text</label>
+    <div id="textInput" contenteditable="true"></div>
+    <div class="input-hint">Supports ChatGPT markdown and rich text from Word/Docs/email.</div>
   </div>
+
   <div id="previewBox" class="preview" style="display:none"></div>
+
   <button class="btn-primary" id="buildBtn" disabled>Generate .docx</button>
   <div class="status" id="status"></div>
+
 </div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
 <script>
-var textArea     = document.getElementById('textInput');
+var textInput    = document.getElementById('textInput');
 var titleInput   = document.getElementById('titleInput');
 var buildBtn     = document.getElementById('buildBtn');
 var statusEl     = document.getElementById('status');
 var previewBox   = document.getElementById('previewBox');
 var charCount    = document.getElementById('charCount');
 var titlePreview = document.getElementById('titlePreview');
-var debounce     = null;
 
-textArea.addEventListener('input', function(){
+var debounceTimer = null;
+
+textInput.addEventListener('input', function () {
   checkReady();
-  clearTimeout(debounce);
-  debounce = setTimeout(function(){ if(textArea.value.trim()) showPreview(); else previewBox.style.display='none'; }, 400);
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(function () {
+    if (getText().trim()) parseAndPreview();
+    else previewBox.style.display = 'none';
+  }, 300);
 });
 
-titleInput.addEventListener('input', function(){
+textInput.addEventListener('paste', function () {
+  setTimeout(function () {
+    if (getText().trim()) { parseAndPreview(); checkReady(); }
+  }, 100);
+});
+
+titleInput.addEventListener('input', function () {
   checkReady();
   var val = titleInput.value;
   charCount.textContent = val.length + ' chars';
-  if(val.trim()){
+  if (val.trim()) {
     var lines = splitTitle(cleanTitle(val.trim()));
-    var h = '<span>Header preview:</span>';
-    for(var i=0;i<lines.length;i++) h += '<div>'+esc(lines[i])+'</div>';
-    titlePreview.innerHTML = h;
+    var html = '<span>Header preview:</span>';
+    for (var i = 0; i < lines.length; i++) html += '<div>' + esc(lines[i]) + '</div>';
+    titlePreview.innerHTML = html;
     titlePreview.style.display = 'block';
   } else { titlePreview.style.display = 'none'; }
 });
 
-buildBtn.addEventListener('click', function(){
-  statusEl.className='status loading'; statusEl.textContent='Building document\u2026';
+buildBtn.addEventListener('click', function () {
+  statusEl.className = 'status loading';
+  statusEl.textContent = 'Building document\u2026';
+
   var title = cleanTitle(titleInput.value.trim());
-  var text = textArea.value.trim();
-  if(!title||!text){ statusEl.className='status err'; statusEl.textContent='Please enter both a title and text.'; return; }
-  var blocks = parseAll(text);
-  if(!blocks.length){ statusEl.className='status err'; statusEl.textContent='Could not parse any content.'; return; }
-  buildDocx(title, blocks).then(function(blob){
-    var fn = title.replace(/[^a-zA-Z0-9 ]/g,'').replace(/\s+/g,'_').substring(0,50)+'.docx';
-    var a = document.createElement('a'); var url = URL.createObjectURL(blob);
-    a.href=url; a.download=fn; document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    setTimeout(function(){ URL.revokeObjectURL(url); }, 5000);
-    statusEl.className='status ok'; statusEl.textContent='\u2713 Downloaded: '+fn;
-  }).catch(function(e){ statusEl.className='status err'; statusEl.textContent='Error: '+e.message; console.error(e); });
+  var text  = getText().trim();
+  if (!text || !title) {
+    statusEl.className = 'status err';
+    statusEl.textContent = 'Please enter both a title and text.';
+    return;
+  }
+
+  var blocks = getBlocks();
+  if (!blocks || blocks.length === 0) {
+    statusEl.className = 'status err';
+    statusEl.textContent = 'Could not parse any content.';
+    return;
+  }
+
+  buildDocx(title, blocks).then(function (blob) {
+    var fn = title.replace(/[^a-zA-Z0-9 ]/g, '').replace(/\s+/g, '_').substring(0, 50) + '.docx';
+    var a = document.createElement('a');
+    var url = URL.createObjectURL(blob);
+    a.href = url; a.download = fn;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 5000);
+    statusEl.className = 'status ok';
+    statusEl.textContent = '\u2713 Downloaded: ' + fn;
+  }).catch(function (e) {
+    statusEl.className = 'status err';
+    statusEl.textContent = 'Error: ' + e.message;
+    console.error(e);
+  });
 });
 
-function checkReady(){ buildBtn.disabled = !(textArea.value.trim() && titleInput.value.trim()); }
-function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function xmlEsc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-function cleanTitle(t){ return t.replace(/^#{1,6}\s*/,'').replace(/\*\*/g,'').replace(/[*_`]/g,'').trim(); }
+/* ── HELPERS ── */
+function getText() { return textInput.innerText || textInput.textContent || ''; }
+function checkReady() {
+  buildBtn.disabled = !(getText().trim().length > 0 && titleInput.value.trim().length > 0);
+}
+function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function xmlEsc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+function cleanTitle(t) { return t.replace(/^#{1,6}\s*/, '').replace(/\*\*/g, '').replace(/[*_`]/g, '').trim(); }
+
+/* ── CONTENT EXTRACTION ── */
+function getBlocks() {
+  var html = textInput.innerHTML;
+  var text = getText();
+  var hasMarkdown = /\*\*[^*]+\*\*/.test(text) || /^#{1,6}\s/m.test(text);
+  if (hasMarkdown) return parseParagraphs(text);
+  var hasRichBold = /<(b|strong)[^>]*>/i.test(html);
+  if (hasRichBold) {
+    var blocks = parseRichHTML(html);
+    if (blocks && blocks.length > 0) return blocks;
+  }
+  return parseParagraphs(text);
+}
 
 /* ── TITLE SPLITTING ── */
-var KEEP_WITH_NEXT=['for','the','a','an','and','or','of','in','on','at','to','by','with','from','as','is','its','not','but','nor','per','via'];
-var MONTHS=['january','february','march','april','may','june','july','august','september','october','november','december','jan','feb','mar','apr','jun','jul','aug','sep','oct','nov','dec'];
-var PERIOD_LABELS=['q1','q2','q3','q4','fy','cy','ytd','mtd','h1','h2'];
-var DATE_PREFACE=['as','of','dated','updated','revised','effective','through','ending','for'];
-function isMonth(w){return MONTHS.indexOf(w.toLowerCase())!==-1}
-function isPeriod(w){return PERIOD_LABELS.indexOf(w.toLowerCase())!==-1}
-function isYear(w){return /^[''\u2018\u2019]?\d{2,4}$/.test(w)}
-function isParen(w){return /^\(.*\)$/.test(w)}
+var KEEP_WITH_NEXT = ['for','the','a','an','and','or','of','in','on','at','to','by','with','from','as','is','its','not','but','nor','per','via'];
+var MONTHS = ['january','february','march','april','may','june','july','august','september','october','november','december','jan','feb','mar','apr','jun','jul','aug','sep','oct','nov','dec'];
+var PERIOD_LABELS = ['q1','q2','q3','q4','fy','cy','ytd','mtd','h1','h2'];
+var DATE_PREFACE = ['as','of','dated','updated','revised','effective','through','ending','for'];
+function isMonth(w) { return MONTHS.indexOf(w.toLowerCase()) !== -1; }
+function isPeriod(w) { return PERIOD_LABELS.indexOf(w.toLowerCase()) !== -1; }
+function isYear(w) { return /^[''\u2018\u2019]?\d{2,4}$/.test(w); }
+function isParen(w) { return /^\(.*\)$/.test(w); }
 
-function splitTitle(title){
-  var t=title.trim();
-  var sep=t.match(/^(.+?)\s*[\u2014\u2013\|]\s*(.+)$/);
-  if(sep&&sep[1].trim()&&sep[2].trim()) return splitTitle(sep[1].trim()).concat(splitTitle(sep[2].trim()));
-  var col=t.match(/^(.{8,}?)\s*:\s*(.{4,})$/);
-  if(col&&col[1].trim()&&col[2].trim()) return splitTitle(col[1].trim()).concat(splitTitle(col[2].trim()));
-  var words=t.split(/\s+/), ds=-1;
-  for(var i=0;i<words.length;i++){
-    if(isMonth(words[i])||isPeriod(words[i])){ds=i;while(ds>0&&DATE_PREFACE.indexOf(words[ds-1].toLowerCase())!==-1)ds--;break;}
-    if(isYear(words[i])&&i>0&&!isMonth(words[i-1])){ds=i;while(ds>0&&DATE_PREFACE.indexOf(words[ds-1].toLowerCase())!==-1)ds--;break;}
+function splitTitle(title) {
+  var t = title.trim();
+  var sep = t.match(/^(.+?)\s*[\u2014\u2013\|]\s*(.+)$/);
+  if (sep && sep[1].trim() && sep[2].trim()) return splitTitle(sep[1].trim()).concat(splitTitle(sep[2].trim()));
+  var col = t.match(/^(.{8,}?)\s*:\s*(.{4,})$/);
+  if (col && col[1].trim() && col[2].trim()) return splitTitle(col[1].trim()).concat(splitTitle(col[2].trim()));
+  var words = t.split(/\s+/), ds = -1;
+  for (var i = 0; i < words.length; i++) {
+    if (isMonth(words[i]) || isPeriod(words[i])) { ds = i; while (ds > 0 && DATE_PREFACE.indexOf(words[ds-1].toLowerCase()) !== -1) ds--; break; }
+    if (isYear(words[i]) && i > 0 && !isMonth(words[i-1])) { ds = i; while (ds > 0 && DATE_PREFACE.indexOf(words[ds-1].toLowerCase()) !== -1) ds--; break; }
   }
-  if(ds>0){var bef=words.slice(0,ds).join(' '),dat=words.slice(ds).join(' ');if(bef&&dat){var ml=bef.length>40?splitTitle(bef):[bef];ml.push(dat);return ml;}}
-  for(var i=1;i<words.length;i++){if(isParen(words[i])){var bef=words.slice(0,i).join(' '),par=words.slice(i).join(' ');if(bef){var r=splitTitle(bef);var last=r[r.length-1];if((last+' '+par).length<=40)r[r.length-1]=last+' '+par;else r.push(par);return r;}}}
-  if(t.length<=40) return[t];
-  var lines=[],cur='';
-  for(var i=0;i<words.length;i++){
-    var w=words[i];
-    if(cur&&(isMonth(w)||isPeriod(w))){lines.push(cur);cur=w;continue;}
-    if(cur&&isYear(w)){var p=cur.split(/\s+/);if(isMonth(p[p.length-1])||isPeriod(p[p.length-1])){cur+=' '+w;continue;}}
-    var test=cur?cur+' '+w:w;
-    if(test.length<=40){cur=test;}else{if(cur){var parts=cur.split(/\s+/);var lw=parts[parts.length-1].toLowerCase();if(parts.length>1&&KEEP_WITH_NEXT.indexOf(lw)!==-1){var mv=parts.pop();lines.push(parts.join(' '));cur=mv+' '+w;}else{lines.push(cur);cur=w;}}else cur=w;}
+  if (ds > 0) { var bef = words.slice(0,ds).join(' '), dat = words.slice(ds).join(' '); if (bef && dat) { var ml = bef.length > 40 ? splitTitle(bef) : [bef]; ml.push(dat); return ml; } }
+  for (var i = 1; i < words.length; i++) { if (isParen(words[i])) { var bef = words.slice(0,i).join(' '), par = words.slice(i).join(' '); if (bef) { var r = splitTitle(bef); var last = r[r.length-1]; if ((last+' '+par).length <= 40) r[r.length-1] = last+' '+par; else r.push(par); return r; } } }
+  if (t.length <= 40) return [t];
+  var lines = [], cur = '';
+  for (var i = 0; i < words.length; i++) {
+    var w = words[i];
+    if (cur && (isMonth(w) || isPeriod(w))) { lines.push(cur); cur = w; continue; }
+    if (cur && isYear(w)) { var p = cur.split(/\s+/); if (isMonth(p[p.length-1]) || isPeriod(p[p.length-1])) { cur += ' ' + w; continue; } }
+    var test = cur ? cur + ' ' + w : w;
+    if (test.length <= 40) { cur = test; } else { if (cur) { var parts = cur.split(/\s+/); var lw = parts[parts.length-1].toLowerCase(); if (parts.length > 1 && KEEP_WITH_NEXT.indexOf(lw) !== -1) { var mv = parts.pop(); lines.push(parts.join(' ')); cur = mv + ' ' + w; } else { lines.push(cur); cur = w; } } else cur = w; }
   }
-  if(cur)lines.push(cur);return lines;
+  if (cur) lines.push(cur);
+  return lines;
 }
 
-/* ── PARSING ── */
-function cleanInline(s){
+/* ── RICH HTML PARSER ── */
+function parseRichHTML(html) {
+  var temp = document.createElement('div');
+  temp.innerHTML = html;
+  var blocks = [];
+  var children = temp.childNodes;
+  for (var i = 0; i < children.length; i++) {
+    var node = children[i];
+    var tag = (node.tagName || '').toUpperCase();
+    if (node.nodeType === 3 && !node.textContent.trim()) continue;
+    if (tag === 'H1') { blocks.push({ type: 'h1', text: node.textContent.trim(), runs: [{ t: node.textContent.trim(), b: true }] }); continue; }
+    if (tag === 'H2' || tag === 'H3') { blocks.push({ type: 'h2', text: node.textContent.trim(), runs: [{ t: node.textContent.trim(), b: true }] }); continue; }
+    if (tag === 'UL' || tag === 'OL') { var items = node.querySelectorAll('li'); for (var j = 0; j < items.length; j++) blocks.push({ type: 'bullet', text: items[j].textContent.trim(), runs: extractRuns(items[j]) }); continue; }
+    var runs = (node.nodeType === 3) ? [{ t: node.textContent.trim(), b: false }] : extractRuns(node);
+    var full = ''; for (var k = 0; k < runs.length; k++) full += runs[k].t; full = full.trim();
+    if (!full) continue;
+    if (isDivider(full)) { blocks.push({ type: 'divider' }); continue; }
+    if (isQuoted(full)) { var cl = full.replace(/^[\u201C\u201D"]+|[\u201C\u201D"]+$/g, '').trim(); blocks.push({ type: 'callout', text: cl, runs: [{ t: cl, b: true }] }); continue; }
+    var allBold = true;
+    for (var k = 0; k < runs.length; k++) { if (runs[k].t.trim() && !runs[k].b) { allBold = false; break; } }
+    if (allBold && full.length < 120) blocks.push({ type: 'h2', text: full, runs: runs });
+    else blocks.push({ type: 'body', text: full, runs: runs });
+  }
+  return blocks;
+}
+function extractRuns(el) {
+  var runs = []; walkNodes(el, false, runs);
+  var merged = [];
+  for (var i = 0; i < runs.length; i++) { if (merged.length > 0 && merged[merged.length-1].b === runs[i].b) merged[merged.length-1].t += runs[i].t; else merged.push({ t: runs[i].t, b: runs[i].b }); }
+  return merged;
+}
+function walkNodes(node, isBold, runs) {
+  if (node.nodeType === 3) { if (node.textContent) runs.push({ t: node.textContent, b: isBold }); return; }
+  var tag = (node.tagName || '').toUpperCase();
+  var bold = isBold || tag === 'B' || tag === 'STRONG';
+  if (!bold && node.style && (node.style.fontWeight === 'bold' || node.style.fontWeight === '700')) bold = true;
+  for (var i = 0; i < node.childNodes.length; i++) walkNodes(node.childNodes[i], bold, runs);
+}
+
+/* ── MARKDOWN PARSER ── */
+function isDivider(t) { t = t.trim(); return t.length >= 3 && /^[\u2500-\u257F\u2014\u2015\u2012\u2013—–\-_=*]{3,}$/.test(t); }
+function isQuoted(t) { t = t.trim(); var a = t.charAt(0), z = t.charAt(t.length-1); return (a === '"' && z === '"') || (a === '\u201C' && z === '\u201D') || (a === '"' && z === '\u201D') || (a === '\u201C' && z === '"'); }
+
+function cleanInline(s) {
   return s.replace(/\*\*\*(.+?)\*\*\*/g,'$1').replace(/\*\*(.+?)\*\*/g,'$1').replace(/\*(.+?)\*/g,'$1').replace(/__(.+?)__/g,'$1').replace(/_(.+?)_/g,'$1').replace(/`(.+?)`/g,'$1').replace(/```/g,'').trim();
 }
-function parseRuns(s){
-  s=s.replace(/\*\*\*(.+?)\*\*\*/g,'**$1**');
-  var runs=[],re=/\*\*(.+?)\*\*/g,last=0,m;
-  while((m=re.exec(s))!==null){
-    if(m.index>last){var b=s.substring(last,m.index).replace(/[*_`]/g,'');if(b)runs.push({t:b,b:false});}
-    runs.push({t:m[1],b:true}); last=re.lastIndex;
+function parseInlineRuns(s) {
+  s = s.replace(/\*\*\*(.+?)\*\*\*/g, '**$1**');
+  var runs = [], re = /\*\*(.+?)\*\*/g, last = 0, m;
+  while ((m = re.exec(s)) !== null) {
+    if (m.index > last) { var b = s.substring(last, m.index).replace(/[*_`]/g, ''); if (b) runs.push({ t: b, b: false }); }
+    runs.push({ t: m[1], b: true }); last = re.lastIndex;
   }
-  if(last<s.length){var r=s.substring(last).replace(/[*_`]/g,'');if(r)runs.push({t:r,b:false});}
-  if(!runs.length)runs.push({t:cleanInline(s),b:false});
+  if (last < s.length) { var r = s.substring(last).replace(/[*_`]/g, ''); if (r) runs.push({ t: r, b: false }); }
+  if (!runs.length) runs.push({ t: cleanInline(s), b: false });
   return runs;
 }
 
-function isDivider(t){t=t.trim();return t.length>=3&&/^[\u2500-\u257F\u2014\u2015\u2012\u2013—–\-_=*]{3,}$/.test(t);}
-function isQuoted(t){t=t.trim();var a=t.charAt(0),z=t.charAt(t.length-1);return(a==='"'&&z==='"')||(a==='\u201C'&&z==='\u201D')||(a==='"'&&z==='\u201D')||(a==='\u201C'&&z==='"');}
-
-function looksLikeHeading(text, isFirst){
-  var t=text.trim();
-  if(!t||t.length<2) return false;
-  if(isFirst&&t.length<80) return true;
-  if(t.length>60) return false;
-  var last=t.charAt(t.length-1);
-  if('.!?;,'.indexOf(last)!==-1) return false;
-  if(/\.\s/.test(t)) return false;
-  var words=t.split(/\s+/);
-  if(words.length>10) return false;
-  if(words.length<=4) return true;
-  if(/\([^)]+\)\s*$/.test(t)) return true;
-  var cap=0;
-  for(var i=0;i<words.length;i++) if(/^[A-Z\(\$\d"'\u201C]/.test(words[i])) cap++;
-  if(cap>=Math.ceil(words.length*0.4)) return true;
-  return false;
-}
-
-function parseAll(raw){
-  var t=raw.replace(/\r\n/g,'\n').replace(/\r/g,'\n').replace(/\n{3,}/g,'\n\n');
-  var lines=t.split('\n'), blocks=[], i=0, isFirst=true;
-
-  while(i<lines.length){
-    var tr=lines[i].trim();
-    if(!tr){i++;continue;}
-
-    if(isDivider(tr)){blocks.push({type:'divider'});i++;continue;}
-
-    /* ## headings */
-    var hM=tr.match(/^(#{1,6})\s+(.*)/);
-    if(hM){var lv=hM[1].length;var tx=cleanInline(hM[2]);
-      blocks.push({type:lv<=1?'h1':(lv<=2?'h2':'h3'),text:tx,runs:[{t:tx,b:true}]});isFirst=false;i++;continue;}
-
-    /* **Bold-only line** as heading */
-    var bL=tr.match(/^\*\*(.+?)\*\*$/);
-    if(bL&&tr.length<120){var tx=cleanInline(bL[1]);blocks.push({type:'h2',text:tx,runs:[{t:tx,b:true}]});isFirst=false;i++;continue;}
-
-    /* "Quoted callout" */
-    if(isQuoted(tr)){var cl=tr.replace(/^[\u201C\u201D"*]+|[\u201C\u201D"*]+$/g,'').trim();blocks.push({type:'callout',text:cl,runs:[{t:cl,b:true}]});isFirst=false;i++;continue;}
-
-    /* Bullets */
-    var buM=tr.match(/^[\t ]*[-*\u2022]\s+(.*)/);
-    if(buM){blocks.push({type:'bullet',text:cleanInline(buM[1]),runs:parseRuns(buM[1])});isFirst=false;i++;continue;}
-
-    /* Numbered list */
-    var nM=tr.match(/^[\t ]*\d+[.\)]\s+(.*)/);
-    if(nM){blocks.push({type:'bullet',text:cleanInline(nM[1]),runs:parseRuns(nM[1])});isFirst=false;i++;continue;}
-
-    /* Detect unmarked headings */
-    if(looksLikeHeading(tr, isFirst)){
-      var tx=cleanInline(tr);
-      blocks.push({type:isFirst?'h1':'h2',text:tx,runs:[{t:tx,b:true}]});isFirst=false;i++;continue;
+function parseParagraphs(raw) {
+  var t = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n{3,}/g, '\n\n');
+  var lines = t.split('\n'), blocks = [], i = 0;
+  while (i < lines.length) {
+    var tr = lines[i].trim();
+    if (!tr) { i++; continue; }
+    if (isDivider(tr)) { blocks.push({ type: 'divider' }); i++; continue; }
+    var hM = tr.match(/^(#{1,6})\s+(.*)/);
+    if (hM) { var lv = hM[1].length; var tx = cleanInline(hM[2]); blocks.push({ type: lv <= 1 ? 'h1' : 'h2', text: tx, runs: [{ t: tx, b: true }] }); i++; continue; }
+    var bL = tr.match(/^\*\*(.+?)\*\*$/);
+    if (bL && tr.length < 120) { var tx = cleanInline(bL[1]); blocks.push({ type: 'h2', text: tx, runs: [{ t: tx, b: true }] }); i++; continue; }
+    if (isQuoted(tr)) { var cl = tr.replace(/^[\u201C\u201D"*]+|[\u201C\u201D"*]+$/g, '').trim(); blocks.push({ type: 'callout', text: cl, runs: [{ t: cl, b: true }] }); i++; continue; }
+    var buM = tr.match(/^[\t ]*[-*\u2022]\s+(.*)/);
+    if (buM) { blocks.push({ type: 'bullet', text: cleanInline(buM[1]), runs: parseInlineRuns(buM[1]) }); i++; continue; }
+    var nM = tr.match(/^[\t ]*\d+[.\)]\s+(.*)/);
+    if (nM) { blocks.push({ type: 'bullet', text: cleanInline(nM[1]), runs: parseInlineRuns(nM[1]) }); i++; continue; }
+    var para = tr; i++;
+    while (i < lines.length && lines[i].trim() && !isDivider(lines[i].trim()) && !isQuoted(lines[i].trim()) &&
+           !lines[i].trim().match(/^(#{1,6}\s|[\t ]*[-*\u2022]\s|[\t ]*\d+[.\)]\s|\*\*.+\*\*$)/)) {
+      para += ' ' + lines[i].trim(); i++;
     }
-
-    /* Body paragraph */
-    var para=tr;i++;
-    while(i<lines.length&&lines[i].trim()&&!isDivider(lines[i].trim())&&!isQuoted(lines[i].trim())
-      &&!lines[i].trim().match(/^(#{1,6}\s|[\t ]*[-*\u2022]\s|[\t ]*\d+[.\)]\s|\*\*.+\*\*$)/)
-      &&!looksLikeHeading(lines[i].trim(),false)){
-      para+=' '+lines[i].trim();i++;
-    }
-    blocks.push({type:'body',text:cleanInline(para),runs:parseRuns(para)});isFirst=false;
+    blocks.push({ type: 'body', text: cleanInline(para), runs: parseInlineRuns(para) });
   }
-
-  /* Post-process: back-to-back headings → first gets 'section' type */
-  var ht=['h1','h2','h3'];
-  for(var j=0;j<blocks.length;j++){
-    if(ht.indexOf(blocks[j].type)===-1) continue;
-    var nx=j+1;
-    while(nx<blocks.length&&blocks[nx].type==='divider') nx++;
-    if(nx<blocks.length&&ht.indexOf(blocks[nx].type)!==-1) blocks[j].type='section';
-  }
-
   return blocks;
 }
 
 /* ── PREVIEW ── */
-function showPreview(){
-  var blocks=parseAll(textArea.value);
-  var h='<b>Structure Preview:</b><br>';
-  for(var i=0;i<blocks.length;i++){
-    var b=blocks[i];
-    if(b.type==='section') h+='<div class="section">SECTION: '+esc(b.text)+'</div>';
-    else if(b.type==='h1') h+='<div class="h1">H1: '+esc(b.text)+'</div>';
-    else if(b.type==='h2') h+='<div class="h2">H2: '+esc(b.text)+'</div>';
-    else if(b.type==='h3') h+='<div class="h3">H3: '+esc(b.text)+'</div>';
-    else if(b.type==='divider') h+='<div class="divider">\u2500\u2500\u2500 section break \u2500\u2500\u2500</div>';
-    else if(b.type==='callout') h+='<div class="callout">\u275D '+esc(b.text)+'</div>';
-    else if(b.type==='bullet') h+='<div class="bullet">\u2022 '+esc(b.text.substring(0,80))+(b.text.length>80?'\u2026':'')+'</div>';
-    else h+='<div>'+esc(b.text.substring(0,90))+(b.text.length>90?'\u2026':'')+'</div>';
+function parseAndPreview() {
+  var blocks = getBlocks();
+  var html = '<b>Structure Preview:</b><br>';
+  for (var i = 0; i < blocks.length; i++) {
+    var b = blocks[i];
+    if (b.type === 'h1') html += '<div class="h1">H1: ' + esc(b.text) + '</div>';
+    else if (b.type === 'h2') html += '<div class="h2">H2: ' + esc(b.text) + '</div>';
+    else if (b.type === 'divider') html += '<div class="divider">\u2500\u2500\u2500 section break \u2500\u2500\u2500</div>';
+    else if (b.type === 'callout') html += '<div class="callout">\u275D ' + esc(b.text) + '</div>';
+    else if (b.type === 'bullet') html += '<div class="bullet">\u2022 ' + esc(b.text.substring(0,80)) + (b.text.length > 80 ? '\u2026' : '') + '</div>';
+    else html += '<div>' + esc(b.text.substring(0,90)) + (b.text.length > 90 ? '\u2026' : '') + '</div>';
   }
-  previewBox.innerHTML=h; previewBox.style.display='block';
+  previewBox.innerHTML = html;
+  previewBox.style.display = 'block';
 }
 
 /* ── DOCX BUILDER ── */
-var TI=1440, BLUE='204C8D', MG=Math.round(TI*0.5), HD=Math.round(TI*0.2), FD=Math.round(TI*0.2);
-function hp(p){return p*2} function tw(p){return p*20}
+var TWIP_INCH = 1440, BLUE = '204C8D', MARGIN = Math.round(TWIP_INCH * 0.5), HDR_DIST = Math.round(TWIP_INCH * 0.2), FTR_DIST = Math.round(TWIP_INCH * 0.2);
+function hp(pt) { return pt * 2; }
+function tw(pt) { return pt * 20; }
 
-function mkRuns(runs,sz,col){
-  var x='';
-  for(var i=0;i<runs.length;i++){var r=runs[i];
-    x+='<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="'+sz+'"/><w:szCs w:val="'+sz+'"/><w:color w:val="'+col+'"/>'+(r.b?'<w:b/><w:bCs/>':'')+'</w:rPr><w:t xml:space="preserve">'+xmlEsc(r.t)+'</w:t></w:r>';
+function makeRuns(runs, sz, color) {
+  var xml = '';
+  for (var i = 0; i < runs.length; i++) {
+    var r = runs[i];
+    xml += '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="' + sz + '"/><w:szCs w:val="' + sz + '"/><w:color w:val="' + color + '"/>' + (r.b ? '<w:b/><w:bCs/>' : '') + '</w:rPr><w:t xml:space="preserve">' + xmlEsc(r.t) + '</w:t></w:r>';
   }
-  return x;
+  return xml;
 }
 
-function mkBody(blocks){
-  var x='';
-  for(var i=0;i<blocks.length;i++){
-    var b=blocks[i];
-    if(b.type==='section'){
-      var bf=i===0?'0':''+tw(12);
-      x+='<w:p><w:pPr><w:pStyle w:val="Heading1"/><w:spacing w:before="'+bf+'" w:after="'+tw(2)+'" w:line="240" w:lineRule="auto"/><w:pBdr><w:bottom w:val="single" w:sz="6" w:space="2" w:color="'+BLUE+'"/></w:pBdr></w:pPr>'
-        +'<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/><w:sz w:val="'+hp(14)+'"/><w:szCs w:val="'+hp(14)+'"/><w:color w:val="'+BLUE+'"/></w:rPr>'
-        +'<w:t xml:space="preserve">'+xmlEsc(b.text)+'</w:t></w:r></w:p>';
-    } else if(b.type==='h1'){
-      var bf=i===0?'0':''+tw(8);
-      x+='<w:p><w:pPr><w:pStyle w:val="Heading1"/><w:spacing w:before="'+bf+'" w:after="'+tw(2)+'" w:line="240" w:lineRule="auto"/></w:pPr>'
-        +'<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/><w:sz w:val="'+hp(14)+'"/><w:szCs w:val="'+hp(14)+'"/><w:color w:val="'+BLUE+'"/></w:rPr>'
-        +'<w:t xml:space="preserve">'+xmlEsc(b.text)+'</w:t></w:r></w:p>';
-    } else if(b.type==='h2'){
-      var bf=i===0?'0':''+tw(8);
-      x+='<w:p><w:pPr><w:pStyle w:val="Heading2"/><w:spacing w:before="'+bf+'" w:after="'+tw(2)+'" w:line="240" w:lineRule="auto"/></w:pPr>'
-        +'<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/><w:sz w:val="'+hp(13)+'"/><w:szCs w:val="'+hp(13)+'"/><w:color w:val="'+BLUE+'"/></w:rPr>'
-        +'<w:t xml:space="preserve">'+xmlEsc(b.text)+'</w:t></w:r></w:p>';
-    } else if(b.type==='h3'){
-      x+='<w:p><w:pPr><w:pStyle w:val="Heading2"/><w:spacing w:before="'+tw(4)+'" w:after="'+tw(2)+'" w:line="240" w:lineRule="auto"/></w:pPr>'
-        +'<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/><w:sz w:val="'+hp(13)+'"/><w:szCs w:val="'+hp(13)+'"/><w:color w:val="'+BLUE+'"/></w:rPr>'
-        +'<w:t xml:space="preserve">'+xmlEsc(b.text)+'</w:t></w:r></w:p>';
-    } else if(b.type==='divider'){
-      x+='<w:p><w:pPr><w:spacing w:before="'+tw(6)+'" w:after="'+tw(6)+'" w:line="240" w:lineRule="auto"/><w:pBdr><w:bottom w:val="single" w:sz="4" w:space="1" w:color="'+BLUE+'"/></w:pBdr></w:pPr></w:p>';
-    } else if(b.type==='callout'){
-      x+='<w:p><w:pPr><w:spacing w:before="'+tw(4)+'" w:after="'+tw(4)+'" w:line="240" w:lineRule="auto"/><w:ind w:left="'+Math.round(TI*0.4)+'"/></w:pPr>'
-        +'<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/><w:sz w:val="'+hp(13)+'"/><w:szCs w:val="'+hp(13)+'"/><w:color w:val="'+BLUE+'"/></w:rPr>'
-        +'<w:t xml:space="preserve">'+xmlEsc(b.text)+'</w:t></w:r></w:p>';
-    } else if(b.type==='bullet'){
-      x+='<w:p><w:pPr><w:pStyle w:val="ListBullet"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr><w:spacing w:before="0" w:after="'+tw(6)+'" w:line="240" w:lineRule="auto"/></w:pPr>'+mkRuns(b.runs,hp(13),'000000')+'</w:p>';
+function makeBody(blocks) {
+  var xml = '';
+  for (var i = 0; i < blocks.length; i++) {
+    var b = blocks[i];
+    if (b.type === 'h1') {
+      var bef = (i === 0) ? '0' : '' + tw(8);
+      xml += '<w:p><w:pPr><w:pStyle w:val="Heading1"/><w:spacing w:before="' + bef + '" w:after="' + tw(2) + '" w:line="240" w:lineRule="auto"/></w:pPr>'
+        + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/><w:sz w:val="' + hp(14) + '"/><w:szCs w:val="' + hp(14) + '"/><w:color w:val="' + BLUE + '"/></w:rPr><w:t xml:space="preserve">' + xmlEsc(b.text) + '</w:t></w:r></w:p>';
+    } else if (b.type === 'h2') {
+      var bef = (i === 0) ? '0' : '' + tw(8);
+      xml += '<w:p><w:pPr><w:pStyle w:val="Heading2"/><w:spacing w:before="' + bef + '" w:after="' + tw(2) + '" w:line="240" w:lineRule="auto"/></w:pPr>'
+        + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/><w:sz w:val="' + hp(13) + '"/><w:szCs w:val="' + hp(13) + '"/><w:color w:val="' + BLUE + '"/></w:rPr><w:t xml:space="preserve">' + xmlEsc(b.text) + '</w:t></w:r></w:p>';
+    } else if (b.type === 'divider') {
+      xml += '<w:p><w:pPr><w:spacing w:before="' + tw(6) + '" w:after="' + tw(6) + '" w:line="240" w:lineRule="auto"/><w:pBdr><w:bottom w:val="single" w:sz="4" w:space="1" w:color="' + BLUE + '"/></w:pBdr></w:pPr></w:p>';
+    } else if (b.type === 'callout') {
+      xml += '<w:p><w:pPr><w:spacing w:before="' + tw(4) + '" w:after="' + tw(4) + '" w:line="240" w:lineRule="auto"/><w:ind w:left="' + Math.round(TWIP_INCH * 0.4) + '"/></w:pPr>'
+        + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/><w:sz w:val="' + hp(13) + '"/><w:szCs w:val="' + hp(13) + '"/><w:color w:val="' + BLUE + '"/></w:rPr><w:t xml:space="preserve">' + xmlEsc(b.text) + '</w:t></w:r></w:p>';
+    } else if (b.type === 'bullet') {
+      xml += '<w:p><w:pPr><w:pStyle w:val="ListBullet"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr><w:spacing w:before="0" w:after="' + tw(6) + '" w:line="240" w:lineRule="auto"/></w:pPr>' + makeRuns(b.runs, hp(13), '000000') + '</w:p>';
     } else {
-      x+='<w:p><w:pPr><w:spacing w:before="0" w:after="'+tw(6)+'" w:line="240" w:lineRule="auto"/></w:pPr>'+mkRuns(b.runs,hp(13),'000000')+'</w:p>';
+      xml += '<w:p><w:pPr><w:spacing w:before="0" w:after="' + tw(6) + '" w:line="240" w:lineRule="auto"/></w:pPr>' + makeRuns(b.runs, hp(13), '000000') + '</w:p>';
     }
   }
-  return x;
+  return xml;
 }
 
-function mkHeader(title){
-  var c=cleanTitle(title),lines=splitTitle(c);
-  var x='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">';
-  for(var i=0;i<lines.length;i++)
-    x+='<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="'+hp(16)+'"/><w:szCs w:val="'+hp(16)+'"/><w:color w:val="'+BLUE+'"/></w:rPr><w:t xml:space="preserve">'+xmlEsc(lines[i])+'</w:t></w:r></w:p>';
-  x+='<w:p><w:pPr><w:spacing w:after="'+tw(6)+'" w:line="240" w:lineRule="auto"/><w:rPr><w:sz w:val="'+hp(1)+'"/><w:szCs w:val="'+hp(1)+'"/></w:rPr></w:pPr></w:p></w:hdr>';
-  return x;
+function makeHeaderXml(title) {
+  var clean = cleanTitle(title);
+  var lines = splitTitle(clean);
+  var xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">';
+  for (var i = 0; i < lines.length; i++)
+    xml += '<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="' + hp(16) + '"/><w:szCs w:val="' + hp(16) + '"/><w:color w:val="' + BLUE + '"/></w:rPr><w:t xml:space="preserve">' + xmlEsc(lines[i]) + '</w:t></w:r></w:p>';
+  xml += '<w:p><w:pPr><w:spacing w:after="' + tw(6) + '" w:line="240" w:lineRule="auto"/><w:rPr><w:sz w:val="' + hp(1) + '"/><w:szCs w:val="' + hp(1) + '"/></w:rPr></w:pPr></w:p></w:hdr>';
+  return xml;
 }
 
-function buildDocx(title,blocks){
-  var z=new JSZip();
-  z.file('[Content_Types].xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/><Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/><Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/></Types>');
-  z.file('_rels/.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/></Relationships>');
-  z.file('docProps/core.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>'+xmlEsc(title)+'</dc:title><dcterms:created xsi:type="dcterms:W3CDTF">'+new Date().toISOString()+'</dcterms:created></cp:coreProperties>');
-  z.file('word/_rels/document.xml.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/><Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/></Relationships>');
-  z.file('word/styles.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="'+hp(13)+'"/><w:szCs w:val="'+hp(13)+'"/><w:color w:val="000000"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:before="0" w:after="'+tw(6)+'" w:line="240" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:pPr><w:spacing w:before="'+tw(8)+'" w:after="'+tw(2)+'"/></w:pPr><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/><w:sz w:val="'+hp(14)+'"/><w:szCs w:val="'+hp(14)+'"/><w:color w:val="'+BLUE+'"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:pPr><w:spacing w:before="'+tw(8)+'" w:after="'+tw(2)+'"/></w:pPr><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/><w:sz w:val="'+hp(13)+'"/><w:szCs w:val="'+hp(13)+'"/><w:color w:val="'+BLUE+'"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="ListBullet"><w:name w:val="List Bullet"/><w:pPr><w:spacing w:before="0" w:after="'+tw(6)+'"/></w:pPr><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="'+hp(13)+'"/><w:szCs w:val="'+hp(13)+'"/></w:rPr></w:style></w:styles>');
-  z.file('word/numbering.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="&#xF0B7;"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr><w:rPr><w:rFonts w:ascii="Symbol" w:hAnsi="Symbol" w:hint="default"/></w:rPr></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num></w:numbering>');
-  z.file('word/header1.xml',mkHeader(title));
-  var now=new Date(),ds=String(now.getMonth()+1).padStart(2,'0')+'/'+String(now.getDate()).padStart(2,'0')+'/'+String(now.getFullYear()).slice(-2);
-  z.file('word/footer1.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:pPr><w:tabs><w:tab w:val="right" w:pos="'+(12240-MG*2)+'"/></w:tabs></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="'+hp(10)+'"/><w:szCs w:val="'+hp(10)+'"/></w:rPr><w:t xml:space="preserve">'+ds+'</w:t></w:r><w:r><w:tab/></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="'+hp(10)+'"/><w:szCs w:val="'+hp(10)+'"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="'+hp(10)+'"/><w:szCs w:val="'+hp(10)+'"/></w:rPr><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="'+hp(10)+'"/><w:szCs w:val="'+hp(10)+'"/></w:rPr><w:fldChar w:fldCharType="end"/></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="'+hp(10)+'"/><w:szCs w:val="'+hp(10)+'"/></w:rPr><w:t xml:space="preserve"> of </w:t></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="'+hp(10)+'"/><w:szCs w:val="'+hp(10)+'"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="'+hp(10)+'"/><w:szCs w:val="'+hp(10)+'"/></w:rPr><w:instrText xml:space="preserve"> NUMPAGES </w:instrText></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="'+hp(10)+'"/><w:szCs w:val="'+hp(10)+'"/></w:rPr><w:fldChar w:fldCharType="end"/></w:r></w:p></w:ftr>');
-  var body=mkBody(blocks);
-  z.file('word/document.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>'+body+'<w:sectPr><w:headerReference w:type="default" r:id="rId3"/><w:footerReference w:type="default" r:id="rId4"/><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="'+MG+'" w:right="'+MG+'" w:bottom="'+MG+'" w:left="'+MG+'" w:header="'+HD+'" w:footer="'+FD+'"/></w:sectPr></w:body></w:document>');
-  return z.generateAsync({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+function buildDocx(title, blocks) {
+  var zip = new JSZip();
+  zip.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/><Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/><Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/></Types>');
+  zip.file('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/></Relationships>');
+  zip.file('docProps/core.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>' + xmlEsc(title) + '</dc:title><dcterms:created xsi:type="dcterms:W3CDTF">' + new Date().toISOString() + '</dcterms:created></cp:coreProperties>');
+  zip.file('word/_rels/document.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/><Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/></Relationships>');
+  zip.file('word/styles.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="' + hp(13) + '"/><w:szCs w:val="' + hp(13) + '"/><w:color w:val="000000"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:before="0" w:after="' + tw(6) + '" w:line="240" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:pPr><w:spacing w:before="' + tw(8) + '" w:after="' + tw(2) + '"/></w:pPr><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/><w:sz w:val="' + hp(14) + '"/><w:szCs w:val="' + hp(14) + '"/><w:color w:val="' + BLUE + '"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:pPr><w:spacing w:before="' + tw(8) + '" w:after="' + tw(2) + '"/></w:pPr><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/><w:sz w:val="' + hp(13) + '"/><w:szCs w:val="' + hp(13) + '"/><w:color w:val="' + BLUE + '"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="ListBullet"><w:name w:val="List Bullet"/><w:pPr><w:spacing w:before="0" w:after="' + tw(6) + '"/></w:pPr><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="' + hp(13) + '"/><w:szCs w:val="' + hp(13) + '"/></w:rPr></w:style></w:styles>');
+  zip.file('word/numbering.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="&#xF0B7;"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr><w:rPr><w:rFonts w:ascii="Symbol" w:hAnsi="Symbol" w:hint="default"/></w:rPr></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num></w:numbering>');
+  zip.file('word/header1.xml', makeHeaderXml(title));
+  var now = new Date(), ds = String(now.getMonth()+1).padStart(2,'0') + '/' + String(now.getDate()).padStart(2,'0') + '/' + String(now.getFullYear()).slice(-2);
+  zip.file('word/footer1.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:pPr><w:tabs><w:tab w:val="right" w:pos="' + (12240 - MARGIN * 2) + '"/></w:tabs></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr><w:t xml:space="preserve">' + ds + '</w:t></w:r><w:r><w:tab/></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr><w:fldChar w:fldCharType="end"/></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr><w:t xml:space="preserve"> of </w:t></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr><w:instrText xml:space="preserve"> NUMPAGES </w:instrText></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr><w:fldChar w:fldCharType="end"/></w:r></w:p></w:ftr>');
+  var bodyXml = makeBody(blocks);
+  zip.file('word/document.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>' + bodyXml + '<w:sectPr><w:headerReference w:type="default" r:id="rId3"/><w:footerReference w:type="default" r:id="rId4"/><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="' + MARGIN + '" w:right="' + MARGIN + '" w:bottom="' + MARGIN + '" w:left="' + MARGIN + '" w:header="' + HDR_DIST + '" w:footer="' + FTR_DIST + '"/></w:sectPr></w:body></w:document>');
+  return zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
 }
 </script>
 </body>
