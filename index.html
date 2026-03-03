@@ -119,7 +119,7 @@ button {
 <body>
 
 <h1>ChatGPT &#8594; Word Document</h1>
-<p class="subtitle">Paste ChatGPT output or formatted text below. Bold formatting is preserved. <span style="color:#334155">v1.7</span></p>
+<p class="subtitle">Paste ChatGPT output or formatted text below. Bold formatting is preserved. <span style="color:#334155">v1.8</span></p>
 
 <div class="container">
 
@@ -303,6 +303,17 @@ function parseRichHTML(html) {
     if (allBold && full.length < 120) blocks.push({ type: 'h2', text: full, runs: runs });
     else blocks.push({ type: 'body', text: full, runs: runs });
   }
+  /* Post-process: back-to-back headings — underline the first */
+  var htypes = ['h1', 'h2'];
+  for (var j = 0; j < blocks.length - 1; j++) {
+    if (htypes.indexOf(blocks[j].type) !== -1) {
+      var nx = j + 1;
+      while (nx < blocks.length && blocks[nx].type === 'divider') nx++;
+      if (nx < blocks.length && htypes.indexOf(blocks[nx].type) !== -1) {
+        blocks[j].underline = true;
+      }
+    }
+  }
   return blocks;
 }
 function extractRuns(el) {
@@ -320,7 +331,7 @@ function walkNodes(node, isBold, runs) {
 }
 
 /* ── MARKDOWN PARSER ── */
-function isDivider(t) { t = t.trim(); return t.length >= 3 && /^[\u2500-\u257F\u2014\u2015\u2012\u2013—–\-_=*]{3,}$/.test(t); }
+function isDivider(t) { t = t.trim(); return t.length >= 3 && /^[\u2500-\u257F\u2014\u2015\u2012\u2013\u2014\u2015\u2E3A\u2E3B—–\-_=*]{3,}$/.test(t); }
 function isQuoted(t) { t = t.trim(); var a = t.charAt(0), z = t.charAt(t.length-1); return (a === '"' && z === '"') || (a === '\u201C' && z === '\u201D') || (a === '"' && z === '\u201D') || (a === '\u201C' && z === '"'); }
 
 function cleanInline(s) {
@@ -362,7 +373,7 @@ function parseParagraphs(raw) {
     blocks.push({ type: 'body', text: cleanInline(para), runs: parseInlineRuns(para) });
   }
 
-  /* Post-process: if two headings are back-to-back, underline the first one */
+  /* Post-process: back-to-back headings — underline the first */
   var htypes = ['h1', 'h2'];
   for (var j = 0; j < blocks.length - 1; j++) {
     if (htypes.indexOf(blocks[j].type) !== -1) {
@@ -383,8 +394,9 @@ function parseAndPreview() {
   var html = '<b>Structure Preview:</b><br>';
   for (var i = 0; i < blocks.length; i++) {
     var b = blocks[i];
-    if (b.type === 'h1') html += '<div class="h1">H1: ' + esc(b.text) + '</div>';
-    else if (b.type === 'h2') html += '<div class="h2">H2: ' + esc(b.text) + '</div>';
+    var ul = b.underline ? ' style="text-decoration:underline"' : '';
+    if (b.type === 'h1') html += '<div class="h1"' + ul + '>H1: ' + esc(b.text) + '</div>';
+    else if (b.type === 'h2') html += '<div class="h2"' + ul + '>H2: ' + esc(b.text) + '</div>';
     else if (b.type === 'divider') html += '<div class="divider">\u2500\u2500\u2500 section break \u2500\u2500\u2500</div>';
     else if (b.type === 'callout') html += '<div class="callout">\u275D ' + esc(b.text) + '</div>';
     else if (b.type === 'bullet') html += '<div class="bullet">\u2022 ' + esc(b.text.substring(0,80)) + (b.text.length > 80 ? '\u2026' : '') + '</div>';
