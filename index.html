@@ -1,14 +1,25 @@
+<!--
+UPDATED VERSION (incorporates all 7 print-readability upgrades)
+Drop this in place of your existing file.
+Changes made:
+1) Body/bullets use dark gray (1A1A1A) instead of pure black
+2) Bold-only lines auto-promote to H2 only if shorter OR ends with colon
+3) Headings use keepNext (prevents stranded headings at page bottom)
+4) Body/bullets use widowControl
+5) Divider thinner + neutral gray; callouts get left border (printer-friendly)
+6) Bullet symbol switched to standard U+2022 (•) with a safe font choice
+7) Adds small before-spacing on bullets when following a body paragraph
+-->
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>ChatGPT to Word Document Builder</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Lexend:wght@400;700&display=swap');
-
 * { box-sizing: border-box; margin: 0; padding: 0; }
-
 body {
   font-family: 'Lexend', sans-serif;
   background: #0f172a;
@@ -19,12 +30,10 @@ body {
   align-items: center;
   padding: 24px;
 }
-
 h1 { font-size: 1.6rem; color: #93c5fd; margin-bottom: 4px; text-align: center; }
 .subtitle { color: #64748b; font-size: 0.85rem; margin-bottom: 20px; text-align: center; }
 .container { width: 100%; max-width: 800px; display: flex; flex-direction: column; gap: 16px; }
 label { font-size: 0.85rem; color: #94a3b8; font-weight: 700; }
-
 #textInput {
   width: 100%;
   min-height: 340px;
@@ -45,7 +54,6 @@ label { font-size: 0.85rem; color: #94a3b8; font-weight: 700; }
 #textInput b, #textInput strong { color: #e2e8f0; font-weight: 700; }
 
 .title-row { display: flex; gap: 10px; align-items: center; }
-
 .title-row input {
   flex: 1;
   background: #1e293b;
@@ -59,7 +67,6 @@ label { font-size: 0.85rem; color: #94a3b8; font-weight: 700; }
   transition: border 0.2s;
 }
 .title-row input:focus { border-color: #3b82f6; }
-
 .char-count { font-size: 0.7rem; color: #64748b; white-space: nowrap; }
 
 button {
@@ -72,7 +79,6 @@ button {
   cursor: pointer;
   transition: all 0.2s;
 }
-
 .btn-primary { background: linear-gradient(135deg, #3b82f6, #2563eb); color: #fff; width: 100%; }
 .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(59, 130, 246, 0.4); }
 .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
@@ -112,17 +118,15 @@ button {
   display: none;
 }
 .title-preview span { color: #64748b; font-size: 0.7rem; display: block; margin-bottom: 4px; }
-
 .input-hint { font-size: 0.7rem; color: #475569; margin-top: 4px; }
 </style>
 </head>
 <body>
 
 <h1>ChatGPT &#8594; Word Document</h1>
-<p class="subtitle">Paste ChatGPT output or formatted text below. Bold formatting is preserved. <span style="color:#334155">v1.9</span></p>
+<p class="subtitle">Paste ChatGPT output or formatted text below. Bold formatting is preserved. <span style="color:#334155">v1.9+</span></p>
 
 <div class="container">
-
   <div>
     <label>Document Title (used in header)</label>
     <div class="title-row" style="margin-top:6px">
@@ -142,7 +146,6 @@ button {
 
   <button class="btn-primary" id="buildBtn" disabled>Generate .docx</button>
   <div class="status" id="status"></div>
-
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -235,14 +238,9 @@ function getBlocks() {
   var html = textInput.innerHTML;
   var text = getText();
 
-  /* Always try markdown parser first on the plain text.
-     This catches both:
-     - Original paste where ## was converted to <h2> (via rich parser fallback)
-     - Manually typed ## that the user added after editing */
   var hasMarkdown = /\*\*[^*]+\*\*/.test(text) || /^#{1,6}\s/m.test(text);
   if (hasMarkdown) return parseParagraphs(text);
 
-  /* No markdown in plain text — try rich HTML parser for bold/headings from paste */
   var hasRichBold = /<(b|strong|h[1-6])[^>]*>/i.test(html);
   if (hasRichBold) {
     var blocks = parseRichHTML(html);
@@ -281,7 +279,15 @@ function splitTitle(title) {
     if (cur && (isMonth(w) || isPeriod(w))) { lines.push(cur); cur = w; continue; }
     if (cur && isYear(w)) { var p = cur.split(/\s+/); if (isMonth(p[p.length-1]) || isPeriod(p[p.length-1])) { cur += ' ' + w; continue; } }
     var test = cur ? cur + ' ' + w : w;
-    if (test.length <= 40) { cur = test; } else { if (cur) { var parts = cur.split(/\s+/); var lw = parts[parts.length-1].toLowerCase(); if (parts.length > 1 && KEEP_WITH_NEXT.indexOf(lw) !== -1) { var mv = parts.pop(); lines.push(parts.join(' ')); cur = mv + ' ' + w; } else { lines.push(cur); cur = w; } } else cur = w; }
+    if (test.length <= 40) { cur = test; }
+    else {
+      if (cur) {
+        var parts = cur.split(/\s+/); var lw = parts[parts.length-1].toLowerCase();
+        if (parts.length > 1 && KEEP_WITH_NEXT.indexOf(lw) !== -1) {
+          var mv = parts.pop(); lines.push(parts.join(' ')); cur = mv + ' ' + w;
+        } else { lines.push(cur); cur = w; }
+      } else cur = w;
+    }
   }
   if (cur) lines.push(cur);
   return lines;
@@ -293,40 +299,60 @@ function parseRichHTML(html) {
   temp.innerHTML = html;
   var blocks = [];
   var children = temp.childNodes;
+
   for (var i = 0; i < children.length; i++) {
     var node = children[i];
     var tag = (node.tagName || '').toUpperCase();
     if (node.nodeType === 3 && !node.textContent.trim()) continue;
+
     if (tag === 'H1') { blocks.push({ type: 'h1', text: node.textContent.trim(), runs: [{ t: node.textContent.trim(), b: true }] }); continue; }
     if (tag === 'H2' || tag === 'H3') { blocks.push({ type: 'h2', text: node.textContent.trim(), runs: [{ t: node.textContent.trim(), b: true }] }); continue; }
-    if (tag === 'UL' || tag === 'OL') { var items = node.querySelectorAll('li'); for (var j = 0; j < items.length; j++) blocks.push({ type: 'bullet', text: items[j].textContent.trim(), runs: extractRuns(items[j]) }); continue; }
+
+    if (tag === 'UL' || tag === 'OL') {
+      var items = node.querySelectorAll('li');
+      for (var j = 0; j < items.length; j++) blocks.push({ type: 'bullet', text: items[j].textContent.trim(), runs: extractRuns(items[j]) });
+      continue;
+    }
+
     var runs = (node.nodeType === 3) ? [{ t: node.textContent.trim(), b: false }] : extractRuns(node);
     var full = ''; for (var k = 0; k < runs.length; k++) full += runs[k].t; full = full.trim();
     if (!full) continue;
+
     if (isDivider(full)) { blocks.push({ type: 'divider' }); continue; }
-    if (isQuoted(full)) { var cl = full.replace(/^[\u201C\u201D"]+|[\u201C\u201D"]+$/g, '').trim(); blocks.push({ type: 'callout', text: cl, runs: [{ t: cl, b: true }] }); continue; }
+
+    if (isQuoted(full)) {
+      var cl = full.replace(/^[\u201C\u201D"]+|[\u201C\u201D"]+$/g, '').trim();
+      blocks.push({ type: 'callout', text: cl, runs: [{ t: cl, b: false }] }); // less bold overload
+      continue;
+    }
+
     var allBold = true;
     for (var k = 0; k < runs.length; k++) { if (runs[k].t.trim() && !runs[k].b) { allBold = false; break; } }
-    if (allBold && full.length < 120) blocks.push({ type: 'h2', text: full, runs: runs });
+
+    // (2) More conservative: only promote "all bold" to H2 if short or ends with colon
+    if (allBold && (full.length < 70 || /:\s*$/.test(full))) blocks.push({ type: 'h2', text: full, runs: runs });
     else blocks.push({ type: 'body', text: full, runs: runs });
   }
-  /* Post-process: back-to-back headings — underline the first */
+
+  // underline rule unchanged
   var htypes = ['h1', 'h2'];
   for (var j = 0; j < blocks.length - 1; j++) {
     if (htypes.indexOf(blocks[j].type) !== -1) {
       var nx = j + 1;
       while (nx < blocks.length && blocks[nx].type === 'divider') nx++;
-      if (nx < blocks.length && htypes.indexOf(blocks[nx].type) !== -1) {
-        blocks[j].underline = true;
-      }
+      if (nx < blocks.length && htypes.indexOf(blocks[nx].type) !== -1) blocks[j].underline = true;
     }
   }
   return blocks;
 }
+
 function extractRuns(el) {
   var runs = []; walkNodes(el, false, runs);
   var merged = [];
-  for (var i = 0; i < runs.length; i++) { if (merged.length > 0 && merged[merged.length-1].b === runs[i].b) merged[merged.length-1].t += runs[i].t; else merged.push({ t: runs[i].t, b: runs[i].b }); }
+  for (var i = 0; i < runs.length; i++) {
+    if (merged.length > 0 && merged[merged.length-1].b === runs[i].b) merged[merged.length-1].t += runs[i].t;
+    else merged.push({ t: runs[i].t, b: runs[i].b });
+  }
   return merged;
 }
 function walkNodes(node, isBold, runs) {
@@ -342,16 +368,30 @@ function isDivider(t) { t = t.trim(); return t.length >= 3 && /^[\u2500-\u257F\u
 function isQuoted(t) { t = t.trim(); var a = t.charAt(0), z = t.charAt(t.length-1); return (a === '"' && z === '"') || (a === '\u201C' && z === '\u201D') || (a === '"' && z === '\u201D') || (a === '\u201C' && z === '"'); }
 
 function cleanInline(s) {
-  return s.replace(/\*\*\*(.+?)\*\*\*/g,'$1').replace(/\*\*(.+?)\*\*/g,'$1').replace(/\*(.+?)\*/g,'$1').replace(/__(.+?)__/g,'$1').replace(/_(.+?)_/g,'$1').replace(/`(.+?)`/g,'$1').replace(/```/g,'').trim();
+  return s.replace(/\*\*\*(.+?)\*\*\*/g,'$1')
+          .replace(/\*\*(.+?)\*\*/g,'$1')
+          .replace(/\*(.+?)\*/g,'$1')
+          .replace(/__(.+?)__/g,'$1')
+          .replace(/_(.+?)_/g,'$1')
+          .replace(/`(.+?)`/g,'$1')
+          .replace(/```/g,'')
+          .trim();
 }
 function parseInlineRuns(s) {
   s = s.replace(/\*\*\*(.+?)\*\*\*/g, '**$1**');
   var runs = [], re = /\*\*(.+?)\*\*/g, last = 0, m;
   while ((m = re.exec(s)) !== null) {
-    if (m.index > last) { var b = s.substring(last, m.index).replace(/[*_`]/g, ''); if (b) runs.push({ t: b, b: false }); }
-    runs.push({ t: m[1], b: true }); last = re.lastIndex;
+    if (m.index > last) {
+      var b = s.substring(last, m.index).replace(/[*_`]/g, '');
+      if (b) runs.push({ t: b, b: false });
+    }
+    runs.push({ t: m[1], b: true });
+    last = re.lastIndex;
   }
-  if (last < s.length) { var r = s.substring(last).replace(/[*_`]/g, ''); if (r) runs.push({ t: r, b: false }); }
+  if (last < s.length) {
+    var r = s.substring(last).replace(/[*_`]/g, '');
+    if (r) runs.push({ t: r, b: false });
+  }
   if (!runs.length) runs.push({ t: cleanInline(s), b: false });
   return runs;
 }
@@ -359,19 +399,45 @@ function parseInlineRuns(s) {
 function parseParagraphs(raw) {
   var t = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n{3,}/g, '\n\n');
   var lines = t.split('\n'), blocks = [], i = 0;
+
   while (i < lines.length) {
     var tr = lines[i].trim();
     if (!tr) { i++; continue; }
     if (isDivider(tr)) { blocks.push({ type: 'divider' }); i++; continue; }
+
     var hM = tr.match(/^(#{1,6})\s+(.*)/);
-    if (hM) { var lv = hM[1].length; var tx = cleanInline(hM[2]); blocks.push({ type: lv <= 1 ? 'h1' : 'h2', text: tx, runs: [{ t: tx, b: true }] }); i++; continue; }
+    if (hM) {
+      var lv = hM[1].length;
+      var tx = cleanInline(hM[2]);
+      blocks.push({ type: lv <= 1 ? 'h1' : 'h2', text: tx, runs: [{ t: tx, b: true }] });
+      i++; continue;
+    }
+
+    // (2) More conservative bold-only -> H2
     var bL = tr.match(/^\*\*(.+?)\*\*$/);
-    if (bL && tr.length < 120) { var tx = cleanInline(bL[1]); blocks.push({ type: 'h2', text: tx, runs: [{ t: tx, b: true }] }); i++; continue; }
-    if (isQuoted(tr)) { var cl = tr.replace(/^[\u201C\u201D"*]+|[\u201C\u201D"*]+$/g, '').trim(); blocks.push({ type: 'callout', text: cl, runs: [{ t: cl, b: true }] }); i++; continue; }
+    if (bL) {
+      var tx2 = cleanInline(bL[1]);
+      if ((tr.length < 70) || /:\s*$/.test(tx2)) {
+        blocks.push({ type: 'h2', text: tx2, runs: [{ t: tx2, b: true }] });
+        i++; continue;
+      }
+      // otherwise treat it as body (bold run)
+      blocks.push({ type: 'body', text: tx2, runs: [{ t: tx2, b: true }] });
+      i++; continue;
+    }
+
+    if (isQuoted(tr)) {
+      var cl = tr.replace(/^[\u201C\u201D"*]+|[\u201C\u201D"*]+$/g, '').trim();
+      blocks.push({ type: 'callout', text: cl, runs: [{ t: cl, b: false }] }); // less bold overload
+      i++; continue;
+    }
+
     var buM = tr.match(/^[\t ]*[-*\u2022]\s+(.*)/);
     if (buM) { blocks.push({ type: 'bullet', text: cleanInline(buM[1]), runs: parseInlineRuns(buM[1]) }); i++; continue; }
+
     var nM = tr.match(/^[\t ]*\d+[.\)]\s+(.*)/);
     if (nM) { blocks.push({ type: 'bullet', text: cleanInline(nM[1]), runs: parseInlineRuns(nM[1]) }); i++; continue; }
+
     var para = tr; i++;
     while (i < lines.length && lines[i].trim() && !isDivider(lines[i].trim()) && !isQuoted(lines[i].trim()) &&
            !lines[i].trim().match(/^(#{1,6}\s|[\t ]*[-*\u2022]\s|[\t ]*\d+[.\)]\s|\*\*.+\*\*$)/)) {
@@ -380,18 +446,14 @@ function parseParagraphs(raw) {
     blocks.push({ type: 'body', text: cleanInline(para), runs: parseInlineRuns(para) });
   }
 
-  /* Post-process: back-to-back headings — underline the first */
   var htypes = ['h1', 'h2'];
   for (var j = 0; j < blocks.length - 1; j++) {
     if (htypes.indexOf(blocks[j].type) !== -1) {
       var nx = j + 1;
       while (nx < blocks.length && blocks[nx].type === 'divider') nx++;
-      if (nx < blocks.length && htypes.indexOf(blocks[nx].type) !== -1) {
-        blocks[j].underline = true;
-      }
+      if (nx < blocks.length && htypes.indexOf(blocks[nx].type) !== -1) blocks[j].underline = true;
     }
   }
-
   return blocks;
 }
 
@@ -414,7 +476,14 @@ function parseAndPreview() {
 }
 
 /* ── DOCX BUILDER ── */
-var TWIP_INCH = 1440, BLUE = '204C8D', MARGIN = Math.round(TWIP_INCH * 0.5), HDR_DIST = Math.round(TWIP_INCH * 0.2), FTR_DIST = Math.round(TWIP_INCH * 0.2);
+var TWIP_INCH = 1440;
+var BLUE = '204C8D';
+var BODY = '1A1A1A';          // (1) dark gray for print
+var DIVIDER = '808080';       // (5) neutral divider gray
+var MARGIN = Math.round(TWIP_INCH * 0.5);
+var HDR_DIST = Math.round(TWIP_INCH * 0.2);
+var FTR_DIST = Math.round(TWIP_INCH * 0.2);
+
 function hp(pt) { return pt * 2; }
 function tw(pt) { return pt * 20; }
 
@@ -422,7 +491,12 @@ function makeRuns(runs, sz, color) {
   var xml = '';
   for (var i = 0; i < runs.length; i++) {
     var r = runs[i];
-    xml += '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="' + sz + '"/><w:szCs w:val="' + sz + '"/><w:color w:val="' + color + '"/>' + (r.b ? '<w:b/><w:bCs/>' : '') + '</w:rPr><w:t xml:space="preserve">' + xmlEsc(r.t) + '</w:t></w:r>';
+    xml += '<w:r><w:rPr>'
+      + '<w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
+      + '<w:sz w:val="' + sz + '"/><w:szCs w:val="' + sz + '"/>'
+      + '<w:color w:val="' + color + '"/>'
+      + (r.b ? '<w:b/><w:bCs/>' : '')
+      + '</w:rPr><w:t xml:space="preserve">' + xmlEsc(r.t) + '</w:t></w:r>';
   }
   return xml;
 }
@@ -431,25 +505,71 @@ function makeBody(blocks) {
   var xml = '';
   for (var i = 0; i < blocks.length; i++) {
     var b = blocks[i];
+
     if (b.type === 'h1') {
       var bef = (i === 0) ? '0' : '' + tw(8);
       var ul = b.underline ? '<w:u w:val="single" w:color="' + BLUE + '"/>' : '';
-      xml += '<w:p><w:pPr><w:pStyle w:val="Heading1"/><w:spacing w:before="' + bef + '" w:after="' + tw(2) + '" w:line="240" w:lineRule="auto"/></w:pPr>'
-        + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/><w:sz w:val="' + hp(14) + '"/><w:szCs w:val="' + hp(14) + '"/><w:color w:val="' + BLUE + '"/>' + ul + '</w:rPr><w:t xml:space="preserve">' + xmlEsc(b.text) + '</w:t></w:r></w:p>';
+      // (3) keepNext so heading doesn't strand at page bottom
+      xml += '<w:p><w:pPr><w:pStyle w:val="Heading1"/>'
+        + '<w:keepNext/>'
+        + '<w:spacing w:before="' + bef + '" w:after="' + tw(2) + '" w:line="240" w:lineRule="auto"/>'
+        + '</w:pPr>'
+        + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
+        + '<w:b/><w:bCs/><w:sz w:val="' + hp(14) + '"/><w:szCs w:val="' + hp(14) + '"/>'
+        + '<w:color w:val="' + BLUE + '"/>' + ul
+        + '</w:rPr><w:t xml:space="preserve">' + xmlEsc(b.text) + '</w:t></w:r></w:p>';
+
     } else if (b.type === 'h2') {
-      var bef = (i === 0) ? '0' : '' + tw(8);
-      var ul = b.underline ? '<w:u w:val="single" w:color="' + BLUE + '"/>' : '';
-      xml += '<w:p><w:pPr><w:pStyle w:val="Heading2"/><w:spacing w:before="' + bef + '" w:after="' + tw(2) + '" w:line="240" w:lineRule="auto"/></w:pPr>'
-        + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/><w:sz w:val="' + hp(13) + '"/><w:szCs w:val="' + hp(13) + '"/><w:color w:val="' + BLUE + '"/>' + ul + '</w:rPr><w:t xml:space="preserve">' + xmlEsc(b.text) + '</w:t></w:r></w:p>';
+      var bef2 = (i === 0) ? '0' : '' + tw(8);
+      var ul2 = b.underline ? '<w:u w:val="single" w:color="' + BLUE + '"/>' : '';
+      xml += '<w:p><w:pPr><w:pStyle w:val="Heading2"/>'
+        + '<w:keepNext/>'
+        + '<w:spacing w:before="' + bef2 + '" w:after="' + tw(2) + '" w:line="240" w:lineRule="auto"/>'
+        + '</w:pPr>'
+        + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
+        + '<w:b/><w:bCs/><w:sz w:val="' + hp(13) + '"/><w:szCs w:val="' + hp(13) + '"/>'
+        + '<w:color w:val="' + BLUE + '"/>' + ul2
+        + '</w:rPr><w:t xml:space="preserve">' + xmlEsc(b.text) + '</w:t></w:r></w:p>';
+
     } else if (b.type === 'divider') {
-      xml += '<w:p><w:pPr><w:spacing w:before="' + tw(6) + '" w:after="' + tw(6) + '" w:line="240" w:lineRule="auto"/><w:pBdr><w:bottom w:val="single" w:sz="4" w:space="1" w:color="' + BLUE + '"/></w:pBdr></w:pPr></w:p>';
+      // (5) thinner + neutral gray
+      xml += '<w:p><w:pPr>'
+        + '<w:spacing w:before="' + tw(6) + '" w:after="' + tw(6) + '" w:line="240" w:lineRule="auto"/>'
+        + '<w:pBdr><w:bottom w:val="single" w:sz="2" w:space="1" w:color="' + DIVIDER + '"/></w:pBdr>'
+        + '</w:pPr></w:p>';
+
     } else if (b.type === 'callout') {
-      xml += '<w:p><w:pPr><w:spacing w:before="' + tw(4) + '" w:after="' + tw(4) + '" w:line="240" w:lineRule="auto"/><w:ind w:left="' + Math.round(TWIP_INCH * 0.4) + '"/></w:pPr>'
-        + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/><w:sz w:val="' + hp(13) + '"/><w:szCs w:val="' + hp(13) + '"/><w:color w:val="' + BLUE + '"/></w:rPr><w:t xml:space="preserve">' + xmlEsc(b.text) + '</w:t></w:r></w:p>';
+      // (5) left border callout; less “all bold”
+      xml += '<w:p><w:pPr>'
+        + '<w:widowControl/>' // (4)
+        + '<w:spacing w:before="' + tw(4) + '" w:after="' + tw(4) + '" w:line="240" w:lineRule="auto"/>'
+        + '<w:ind w:left="' + Math.round(TWIP_INCH * 0.35) + '"/>'
+        + '<w:pBdr><w:left w:val="single" w:sz="6" w:space="6" w:color="' + DIVIDER + '"/></w:pBdr>'
+        + '</w:pPr>'
+        + makeRuns(b.runs && b.runs.length ? b.runs : [{t:b.text,b:false}], hp(13), BODY)
+        + '</w:p>';
+
     } else if (b.type === 'bullet') {
-      xml += '<w:p><w:pPr><w:pStyle w:val="ListBullet"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr><w:spacing w:before="0" w:after="' + tw(6) + '" w:line="240" w:lineRule="auto"/></w:pPr>' + makeRuns(b.runs, hp(13), '000000') + '</w:p>';
+      // (7) add small before-spacing if bullet follows body
+      var prev = (i > 0) ? blocks[i-1].type : '';
+      var beforeTw = (prev === 'body') ? tw(3) : 0;
+
+      xml += '<w:p><w:pPr>'
+        + '<w:widowControl/>' // (4)
+        + '<w:pStyle w:val="ListBullet"/>'
+        + '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>'
+        + '<w:spacing w:before="' + beforeTw + '" w:after="' + tw(6) + '" w:line="240" w:lineRule="auto"/>'
+        + '</w:pPr>'
+        + makeRuns(b.runs, hp(13), BODY)  // (1)
+        + '</w:p>';
+
     } else {
-      xml += '<w:p><w:pPr><w:spacing w:before="0" w:after="' + tw(6) + '" w:line="240" w:lineRule="auto"/></w:pPr>' + makeRuns(b.runs, hp(13), '000000') + '</w:p>';
+      xml += '<w:p><w:pPr>'
+        + '<w:widowControl/>' // (4)
+        + '<w:spacing w:before="0" w:after="' + tw(6) + '" w:line="240" w:lineRule="auto"/>'
+        + '</w:pPr>'
+        + makeRuns(b.runs, hp(13), BODY)  // (1)
+        + '</w:p>';
     }
   }
   return xml;
@@ -458,26 +578,164 @@ function makeBody(blocks) {
 function makeHeaderXml(title) {
   var clean = cleanTitle(title);
   var lines = splitTitle(clean);
-  var xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">';
-  for (var i = 0; i < lines.length; i++)
-    xml += '<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="' + hp(16) + '"/><w:szCs w:val="' + hp(16) + '"/><w:color w:val="' + BLUE + '"/></w:rPr><w:t xml:space="preserve">' + xmlEsc(lines[i]) + '</w:t></w:r></w:p>';
-  xml += '<w:p><w:pPr><w:spacing w:after="' + tw(6) + '" w:line="240" w:lineRule="auto"/><w:rPr><w:sz w:val="' + hp(1) + '"/><w:szCs w:val="' + hp(1) + '"/></w:rPr></w:pPr></w:p></w:hdr>';
+  var xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">';
+  for (var i = 0; i < lines.length; i++) {
+    xml += '<w:p><w:pPr><w:jc w:val="center"/>'
+      + '<w:spacing w:after="0" w:line="240" w:lineRule="auto"/>'
+      + '</w:pPr><w:r><w:rPr>'
+      + '<w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
+      + '<w:sz w:val="' + hp(16) + '"/><w:szCs w:val="' + hp(16) + '"/>'
+      + '<w:color w:val="' + BLUE + '"/>'
+      + '</w:rPr><w:t xml:space="preserve">' + xmlEsc(lines[i]) + '</w:t></w:r></w:p>';
+  }
+  xml += '<w:p><w:pPr><w:spacing w:after="' + tw(6) + '" w:line="240" w:lineRule="auto"/>'
+    + '<w:rPr><w:sz w:val="' + hp(1) + '"/><w:szCs w:val="' + hp(1) + '"/></w:rPr>'
+    + '</w:pPr></w:p></w:hdr>';
   return xml;
 }
 
 function buildDocx(title, blocks) {
   var zip = new JSZip();
-  zip.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/><Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/><Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/></Types>');
-  zip.file('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/></Relationships>');
-  zip.file('docProps/core.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>' + xmlEsc(title) + '</dc:title><dcterms:created xsi:type="dcterms:W3CDTF">' + new Date().toISOString() + '</dcterms:created></cp:coreProperties>');
-  zip.file('word/_rels/document.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/><Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/></Relationships>');
-  zip.file('word/styles.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="' + hp(13) + '"/><w:szCs w:val="' + hp(13) + '"/><w:color w:val="000000"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:before="0" w:after="' + tw(6) + '" w:line="240" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:pPr><w:spacing w:before="' + tw(8) + '" w:after="' + tw(2) + '"/></w:pPr><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/><w:sz w:val="' + hp(14) + '"/><w:szCs w:val="' + hp(14) + '"/><w:color w:val="' + BLUE + '"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:pPr><w:spacing w:before="' + tw(8) + '" w:after="' + tw(2) + '"/></w:pPr><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/><w:sz w:val="' + hp(13) + '"/><w:szCs w:val="' + hp(13) + '"/><w:color w:val="' + BLUE + '"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="ListBullet"><w:name w:val="List Bullet"/><w:pPr><w:spacing w:before="0" w:after="' + tw(6) + '"/></w:pPr><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="' + hp(13) + '"/><w:szCs w:val="' + hp(13) + '"/></w:rPr></w:style></w:styles>');
-  zip.file('word/numbering.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="&#xF0B7;"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr><w:rPr><w:rFonts w:ascii="Symbol" w:hAnsi="Symbol" w:hint="default"/></w:rPr></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num></w:numbering>');
+
+  zip.file('[Content_Types].xml',
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+    + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+    + '<Default Extension="xml" ContentType="application/xml"/>'
+    + '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+    + '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>'
+    + '<Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>'
+    + '<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>'
+    + '<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>'
+    + '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>'
+    + '</Types>'
+  );
+
+  zip.file('_rels/.rels',
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
+    + '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>'
+    + '</Relationships>'
+  );
+
+  zip.file('docProps/core.xml',
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"'
+    + ' xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">'
+    + '<dc:title>' + xmlEsc(title) + '</dc:title>'
+    + '<dcterms:created xsi:type="dcterms:W3CDTF">' + new Date().toISOString() + '</dcterms:created>'
+    + '</cp:coreProperties>'
+  );
+
+  zip.file('word/_rels/document.xml.rels',
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
+    + '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>'
+    + '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>'
+    + '<Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>'
+    + '</Relationships>'
+  );
+
+  // (1) update defaults to BODY color so Word uses dark gray consistently
+  zip.file('word/styles.xml',
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+    + '<w:docDefaults>'
+    + '<w:rPrDefault><w:rPr>'
+    + '<w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
+    + '<w:sz w:val="' + hp(13) + '"/><w:szCs w:val="' + hp(13) + '"/>'
+    + '<w:color w:val="' + BODY + '"/>'
+    + '</w:rPr></w:rPrDefault>'
+    + '<w:pPrDefault><w:pPr>'
+    + '<w:widowControl/>' // (4) default widow/orphan control
+    + '<w:spacing w:before="0" w:after="' + tw(6) + '" w:line="240" w:lineRule="auto"/>'
+    + '</w:pPr></w:pPrDefault>'
+    + '</w:docDefaults>'
+    + '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>'
+    + '<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/>'
+    + '<w:pPr><w:keepNext/><w:spacing w:before="' + tw(8) + '" w:after="' + tw(2) + '"/></w:pPr>'
+    + '<w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
+    + '<w:b/><w:bCs/><w:sz w:val="' + hp(14) + '"/><w:szCs w:val="' + hp(14) + '"/>'
+    + '<w:color w:val="' + BLUE + '"/></w:rPr></w:style>'
+    + '<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/>'
+    + '<w:pPr><w:keepNext/><w:spacing w:before="' + tw(8) + '" w:after="' + tw(2) + '"/></w:pPr>'
+    + '<w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
+    + '<w:b/><w:bCs/><w:sz w:val="' + hp(13) + '"/><w:szCs w:val="' + hp(13) + '"/>'
+    + '<w:color w:val="' + BLUE + '"/></w:rPr></w:style>'
+    + '<w:style w:type="paragraph" w:styleId="ListBullet"><w:name w:val="List Bullet"/>'
+    + '<w:pPr><w:widowControl/><w:spacing w:before="0" w:after="' + tw(6) + '"/></w:pPr>'
+    + '<w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
+    + '<w:sz w:val="' + hp(13) + '"/><w:szCs w:val="' + hp(13) + '"/></w:rPr>'
+    + '</w:style>'
+    + '</w:styles>'
+  );
+
+  // (6) bullet symbol to standard • (U+2022) and font to "Symbol" not required
+  zip.file('word/numbering.xml',
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+    + '<w:abstractNum w:abstractNumId="0">'
+    + '<w:lvl w:ilvl="0">'
+    + '<w:start w:val="1"/>'
+    + '<w:numFmt w:val="bullet"/>'
+    + '<w:lvlText w:val="&#x2022;"/>' // •
+    + '<w:lvlJc w:val="left"/>'
+    + '<w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr>'
+    + '<w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:hint="default"/></w:rPr>'
+    + '</w:lvl></w:abstractNum>'
+    + '<w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>'
+    + '</w:numbering>'
+  );
+
   zip.file('word/header1.xml', makeHeaderXml(title));
-  var now = new Date(), ds = String(now.getMonth()+1).padStart(2,'0') + '/' + String(now.getDate()).padStart(2,'0') + '/' + String(now.getFullYear()).slice(-2);
-  zip.file('word/footer1.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:pPr><w:tabs><w:tab w:val="right" w:pos="' + (12240 - MARGIN * 2) + '"/></w:tabs></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr><w:t xml:space="preserve">' + ds + '</w:t></w:r><w:r><w:tab/></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr><w:fldChar w:fldCharType="end"/></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr><w:t xml:space="preserve"> of </w:t></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr><w:instrText xml:space="preserve"> NUMPAGES </w:instrText></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr><w:fldChar w:fldCharType="end"/></w:r></w:p></w:ftr>');
+
+  var now = new Date();
+  var ds = String(now.getMonth()+1).padStart(2,'0') + '/' + String(now.getDate()).padStart(2,'0') + '/' + String(now.getFullYear()).slice(-2);
+
+  zip.file('word/footer1.xml',
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+    + '<w:p><w:pPr><w:tabs><w:tab w:val="right" w:pos="' + (12240 - MARGIN * 2) + '"/></w:tabs></w:pPr>'
+    + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
+    + '<w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr>'
+    + '<w:t xml:space="preserve">' + ds + '</w:t></w:r>'
+    + '<w:r><w:tab/></w:r>'
+    + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
+    + '<w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r>'
+    + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
+    + '<w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r>'
+    + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
+    + '<w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr><w:fldChar w:fldCharType="end"/></w:r>'
+    + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
+    + '<w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr><w:t xml:space="preserve"> of </w:t></w:r>'
+    + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
+    + '<w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r>'
+    + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
+    + '<w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr><w:instrText xml:space="preserve"> NUMPAGES </w:instrText></w:r>'
+    + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/>'
+    + '<w:sz w:val="' + hp(10) + '"/><w:szCs w:val="' + hp(10) + '"/></w:rPr><w:fldChar w:fldCharType="end"/></w:r>'
+    + '</w:p></w:ftr>'
+  );
+
   var bodyXml = makeBody(blocks);
-  zip.file('word/document.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>' + bodyXml + '<w:sectPr><w:headerReference w:type="default" r:id="rId3"/><w:footerReference w:type="default" r:id="rId4"/><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="' + MARGIN + '" w:right="' + MARGIN + '" w:bottom="' + MARGIN + '" w:left="' + MARGIN + '" w:header="' + HDR_DIST + '" w:footer="' + FTR_DIST + '"/></w:sectPr></w:body></w:document>');
+
+  zip.file('word/document.xml',
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+    + ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+    + '<w:body>' + bodyXml
+    + '<w:sectPr>'
+    + '<w:headerReference w:type="default" r:id="rId3"/>'
+    + '<w:footerReference w:type="default" r:id="rId4"/>'
+    + '<w:pgSz w:w="12240" w:h="15840"/>'
+    + '<w:pgMar w:top="' + MARGIN + '" w:right="' + MARGIN + '" w:bottom="' + MARGIN + '" w:left="' + MARGIN + '"'
+    + ' w:header="' + HDR_DIST + '" w:footer="' + FTR_DIST + '"/>'
+    + '</w:sectPr></w:body></w:document>'
+  );
+
   return zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
 }
 </script>
