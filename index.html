@@ -160,6 +160,7 @@ var charCount    = document.getElementById('charCount');
 var titlePreview = document.getElementById('titlePreview');
 
 var debounceTimer = null;
+var rawPastedText = '';  /* Store the raw plain text from clipboard */
 
 /* ============================================================
    EVENT LISTENERS
@@ -168,7 +169,7 @@ textInput.addEventListener('input', function () {
   checkReady();
   clearTimeout(debounceTimer);
   debounceTimer = setTimeout(function () {
-    if (getText().trim()) {
+    if (getRawText().trim()) {
       parseAndPreview();
     } else {
       previewBox.style.display = 'none';
@@ -176,9 +177,16 @@ textInput.addEventListener('input', function () {
   }, 300);
 });
 
-textInput.addEventListener('paste', function () {
+textInput.addEventListener('paste', function (e) {
+  /* Intercept the raw plain text BEFORE the browser renders it */
+  if (e.clipboardData) {
+    var plain = e.clipboardData.getData('text/plain');
+    if (plain) {
+      rawPastedText = plain;
+    }
+  }
   setTimeout(function () {
-    if (getText().trim()) {
+    if (getRawText().trim()) {
       parseAndPreview();
       checkReady();
     }
@@ -207,7 +215,7 @@ buildBtn.addEventListener('click', function () {
   statusEl.textContent = 'Building document\u2026';
 
   var title = cleanTitle(titleInput.value.trim());
-  var text  = getText().trim();
+  var text  = getRawText().trim();
 
   if (!text || !title) {
     statusEl.className = 'status err';
@@ -246,12 +254,15 @@ buildBtn.addEventListener('click', function () {
 /* ============================================================
    HELPERS
    ============================================================ */
-function getText() {
+/* Get the best available raw text — prefer the stored clipboard text
+   which has ## markers and ** markers intact */
+function getRawText() {
+  if (rawPastedText) return rawPastedText;
   return textInput.innerText || textInput.textContent || '';
 }
 
 function checkReady() {
-  var hasText  = getText().trim().length > 0;
+  var hasText  = getRawText().trim().length > 0;
   var hasTitle = titleInput.value.trim().length > 0;
   buildBtn.disabled = !(hasText && hasTitle);
 }
