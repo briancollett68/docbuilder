@@ -119,7 +119,7 @@ button {
 <body>
 
 <h1>ChatGPT &#8594; Word Document</h1>
-<p class="subtitle">Paste ChatGPT output or formatted text below. Bold formatting is preserved.</p>
+<p class="subtitle">Paste ChatGPT output or formatted text below. Bold formatting is preserved. <span style="color:#334155">v1.7</span></p>
 
 <div class="container">
 
@@ -361,6 +361,19 @@ function parseParagraphs(raw) {
     }
     blocks.push({ type: 'body', text: cleanInline(para), runs: parseInlineRuns(para) });
   }
+
+  /* Post-process: if two headings are back-to-back, underline the first one */
+  var htypes = ['h1', 'h2'];
+  for (var j = 0; j < blocks.length - 1; j++) {
+    if (htypes.indexOf(blocks[j].type) !== -1) {
+      var nx = j + 1;
+      while (nx < blocks.length && blocks[nx].type === 'divider') nx++;
+      if (nx < blocks.length && htypes.indexOf(blocks[nx].type) !== -1) {
+        blocks[j].underline = true;
+      }
+    }
+  }
+
   return blocks;
 }
 
@@ -401,12 +414,14 @@ function makeBody(blocks) {
     var b = blocks[i];
     if (b.type === 'h1') {
       var bef = (i === 0) ? '0' : '' + tw(8);
+      var ul = b.underline ? '<w:u w:val="single" w:color="' + BLUE + '"/>' : '';
       xml += '<w:p><w:pPr><w:pStyle w:val="Heading1"/><w:spacing w:before="' + bef + '" w:after="' + tw(2) + '" w:line="240" w:lineRule="auto"/></w:pPr>'
-        + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/><w:sz w:val="' + hp(14) + '"/><w:szCs w:val="' + hp(14) + '"/><w:color w:val="' + BLUE + '"/></w:rPr><w:t xml:space="preserve">' + xmlEsc(b.text) + '</w:t></w:r></w:p>';
+        + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/><w:sz w:val="' + hp(14) + '"/><w:szCs w:val="' + hp(14) + '"/><w:color w:val="' + BLUE + '"/>' + ul + '</w:rPr><w:t xml:space="preserve">' + xmlEsc(b.text) + '</w:t></w:r></w:p>';
     } else if (b.type === 'h2') {
       var bef = (i === 0) ? '0' : '' + tw(8);
+      var ul = b.underline ? '<w:u w:val="single" w:color="' + BLUE + '"/>' : '';
       xml += '<w:p><w:pPr><w:pStyle w:val="Heading2"/><w:spacing w:before="' + bef + '" w:after="' + tw(2) + '" w:line="240" w:lineRule="auto"/></w:pPr>'
-        + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/><w:sz w:val="' + hp(13) + '"/><w:szCs w:val="' + hp(13) + '"/><w:color w:val="' + BLUE + '"/></w:rPr><w:t xml:space="preserve">' + xmlEsc(b.text) + '</w:t></w:r></w:p>';
+        + '<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/><w:sz w:val="' + hp(13) + '"/><w:szCs w:val="' + hp(13) + '"/><w:color w:val="' + BLUE + '"/>' + ul + '</w:rPr><w:t xml:space="preserve">' + xmlEsc(b.text) + '</w:t></w:r></w:p>';
     } else if (b.type === 'divider') {
       xml += '<w:p><w:pPr><w:spacing w:before="' + tw(6) + '" w:after="' + tw(6) + '" w:line="240" w:lineRule="auto"/><w:pBdr><w:bottom w:val="single" w:sz="4" w:space="1" w:color="' + BLUE + '"/></w:pBdr></w:pPr></w:p>';
     } else if (b.type === 'callout') {
