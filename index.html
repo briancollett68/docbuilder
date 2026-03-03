@@ -213,7 +213,7 @@ titleInput.addEventListener('input', function () {
   var val = titleInput.value;
   charCount.textContent = val.length + ' chars';
   if (val.trim()) {
-    var lines = splitTitle(val.trim());
+    var lines = splitTitle(cleanTitle(val.trim()));
     var html = '<span>Header preview:</span>';
     for (var i = 0; i < lines.length; i++) {
       html += '<div>' + esc(lines[i]) + '</div>';
@@ -229,7 +229,7 @@ buildBtn.addEventListener('click', function () {
   statusEl.className = 'status loading';
   statusEl.textContent = 'Building document\u2026';
 
-  var title   = titleInput.value.trim();
+  var title   = cleanTitle(titleInput.value.trim());
   var content = getContent();
   if (!content.text.trim() || !title) return;
 
@@ -699,8 +699,17 @@ function makeBody(blocks) {
   return xml;
 }
 
+function cleanTitle(t) {
+  /* Strip any markdown artifacts from the title */
+  t = t.replace(/^#{1,6}\s*/, '');
+  t = t.replace(/\*\*/g, '');
+  t = t.replace(/[*_`]/g, '');
+  return t.trim();
+}
+
 function makeHeaderXml(title) {
-  var lines = splitTitle(title);
+  var clean = cleanTitle(title);
+  var lines = splitTitle(clean);
   var xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
     + '<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">';
 
