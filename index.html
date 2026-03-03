@@ -357,23 +357,20 @@ function splitTitle(title) {
     }
   }
 
-  /* ── STEP 2: Find date groups and split before them ── */
+  /* ── STEP 2: Find date groups and split before them — ALWAYS ── */
   var words = trimmed.split(/\s+/);
 
-  /* Find the start of a "date group" — this includes any preface words */
   var dateStart = -1;
   for (var i = 0; i < words.length; i++) {
     var w = words[i];
     if (isMonthWord(w) || isPeriodLabel(w) || isDatePattern(w)) {
-      /* Walk backwards to include preface words like "as of", "updated", "for" */
       dateStart = i;
       while (dateStart > 0 && DATE_PREFACE.indexOf(words[dateStart - 1].toLowerCase()) !== -1) {
         dateStart--;
       }
       break;
     }
-    /* A bare year like "2026" only counts if it follows something */
-    if (isYear(w) && i > 0) {
+    if (isYear(w) && i > 0 && !isMonthWord(words[i - 1])) {
       dateStart = i;
       while (dateStart > 0 && DATE_PREFACE.indexOf(words[dateStart - 1].toLowerCase()) !== -1) {
         dateStart--;
@@ -386,9 +383,10 @@ function splitTitle(title) {
     var beforeDate = words.slice(0, dateStart).join(' ');
     var dateGroup = words.slice(dateStart).join(' ');
     if (beforeDate.trim() && dateGroup.trim()) {
-      /* Check if there's a parenthetical or status word after the date */
-      /* Keep it with the date line */
-      return [beforeDate.trim(), dateGroup.trim()];
+      /* Recursively split the non-date part if it's over 40 chars */
+      var mainLines = (beforeDate.length > 40) ? splitTitle(beforeDate) : [beforeDate.trim()];
+      mainLines.push(dateGroup.trim());
+      return mainLines;
     }
   }
 
