@@ -280,15 +280,25 @@ function getBlocks() {
   var html = textInput.innerHTML;
   var text = getText();
 
-  var hasRichBold = /<(b|strong)[^>]*>/i.test(html);
-  var hasMarkdown = /\*\*[^*]+\*\*/.test(text) || /^#{1,6}\s/m.test(text);
+  /* ChatGPT puts bold HTML in the clipboard even for markdown text.
+     The markdown ** markers are the accurate source of what should be bold.
+     Only use the rich HTML parser if the text has NO markdown at all
+     (meaning it came from Word, Google Docs, email, etc.) */
+  var hasMarkdown = /\*\*[^*]+\*\*/.test(text) || /^#{1,6}\s/m.test(text) || /^[-*\u2022]\s/m.test(text) || /^\t*\d+[.\)]\s/m.test(text);
 
   if (hasMarkdown) {
+    /* Use markdown parser — this correctly identifies what's bold via ** markers */
     return parseParagraphs(text);
-  } else if (hasRichBold) {
+  }
+
+  /* No markdown found — check if there's rich bold formatting from Word/Docs */
+  var hasRichBold = /<(b|strong)[^>]*>/i.test(html);
+  if (hasRichBold) {
     var blocks = parseRichHTML(html);
     if (blocks && blocks.length > 0) return blocks;
   }
+
+  /* Fallback — plain text with no formatting */
   return parseParagraphs(text);
 }
 
