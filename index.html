@@ -35,14 +35,11 @@ label { font-size: 0.85rem; color: #94a3b8; font-weight: 700; }
   font-family: 'Lexend', sans-serif;
   font-size: 0.9rem;
   padding: 14px;
+  resize: vertical;
   outline: none;
   transition: border 0.2s;
-  overflow-y: auto;
-  white-space: pre-wrap;
-  word-wrap: break-word;
 }
 #textInput:focus { border-color: #3b82f6; }
-#textInput b, #textInput strong { color: #e2e8f0; font-weight: 700; }
 
 .title-row { display: flex; gap: 10px; align-items: center; }
 
@@ -151,7 +148,7 @@ button {
       <span class="source-badge source-md" id="mdBadge">Markdown detected</span>
       <span class="source-badge source-rich" id="richBadge">Rich formatting detected</span>
     </div>
-    <div id="textInput" contenteditable="true"></div>
+    <textarea id="textInput" placeholder="Paste your ChatGPT output here…"></textarea>
     <div class="input-hint">Supports: ChatGPT markdown, rich text (Word, Docs, email). Quotes in "…" become blue bold callouts.</div>
   </div>
 
@@ -179,6 +176,7 @@ var mdBadge      = document.getElementById('mdBadge');
 var richBadge    = document.getElementById('richBadge');
 
 var debounceTimer = null;
+var lastPastedHTML = '';  /* Store clipboard HTML for rich text detection */
 
 /* ============================================================
    EVENT LISTENERS
@@ -188,7 +186,7 @@ textInput.addEventListener('input', function () {
   clearTimeout(debounceTimer);
   debounceTimer = setTimeout(function () {
     var content = getContent();
-    if (content.text.trim()) {
+    if (textInput.value.trim()) {
       parseAndPreview(content);
     } else {
       previewBox.style.display = 'none';
@@ -198,10 +196,19 @@ textInput.addEventListener('input', function () {
   }, 300);
 });
 
-textInput.addEventListener('paste', function () {
+textInput.addEventListener('paste', function (e) {
+  /* Capture the rich HTML from clipboard before textarea strips it */
+  if (e.clipboardData) {
+    var html = e.clipboardData.getData('text/html');
+    if (html) {
+      lastPastedHTML = html;
+    } else {
+      lastPastedHTML = '';
+    }
+  }
   setTimeout(function () {
     var content = getContent();
-    if (content.text.trim()) {
+    if (textInput.value.trim()) {
       parseAndPreview(content);
       checkReady();
     }
@@ -259,7 +266,7 @@ buildBtn.addEventListener('click', function () {
    HELPERS
    ============================================================ */
 function checkReady() {
-  var hasText  = textInput.textContent.trim().length > 0;
+  var hasText  = textInput.value.trim().length > 0;
   var hasTitle = titleInput.value.trim().length > 0;
   buildBtn.disabled = !(hasText && hasTitle);
 }
@@ -279,22 +286,166 @@ function xmlEsc(s) {
    ============================================================ */
 var KEEP_WITH_NEXT = ['for', 'the', 'a', 'an', 'and', 'or', 'of', 'in', 'on', 'at', 'to', 'by', 'with', 'from', 'as', 'is', 'its', 'not', 'but', 'nor', 'per', 'via'];
 
+/* Months */
+var MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december', 'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+/* Quarter/fiscal labels */
+var PERIOD_LABELS = ['q1', 'q2', 'q3', 'q4', 'fy', 'cy', 'ytd', 'mtd', 'h1', 'h2'];
+/* Status/version words that should stay with the date group */
+var STATUS_WORDS = ['draft', 'final', 'revised', 'updated', 'version', 'confidential', 'internal', 'external', 'preliminary'];
+/* Words that signal "break before me" when they precede a date */
+var DATE_PREFACE = ['as', 'of', 'dated', 'updated', 'revised', 'effective', 'through', 'ending', 'for'];
+
+function isMonthWord(word) {
+  return MONTHS.indexOf(word.toLowerCase()) !== -1;
+}
+function isPeriodLabel(word) {
+  return PERIOD_LABELS.indexOf(word.toLowerCase()) !== -1;
+}
+function isYear(word) {
+  return /^[''\u2018\u2019]?\d{2,4}$/.test(word);
+}
+function isDatePattern(word) {
+  return /^\d{1,2}[\/\-]\d{2,4}$/.test(word) || /^\d{4}[\/\-]\d{1,2}$/.test(word);
+}
+function isStatusWord(word) {
+  return STATUS_WORDS.indexOf(word.toLowerCase().replace(/[()]/g, '')) !== -1;
+}
+function isParenthetical(word) {
+  return /^\(.*\)$/.test(word);
+}
+
+/*
+  Smart title splitter. Priority order:
+  1. Split on explicit separators: — – - : |
+  2. Split before date groups (month+year, Q1 2026, etc.)
+  3. Split before parentheticals like (Draft) (Confidential)
+  4. Split before status words (Draft, Final, Updated) if they precede a date
+  5. Fall back to 40-char word-boundary split with keep-with-next logic
+  6. Never split a month from its year
+*/
 function splitTitle(title) {
-  if (title.length <= 40) return [title];
-  var words = title.split(/\s+/);
+  var trimmed = title.trim();
+
+  /* ── STEP 1: Split on explicit separators ── */
+  var sepMatch = trimmed.match(/^(.+?)\s*[—–\|]\s*(.+)$/);
+  if (sepMatch) {
+    var left = sepMatch[1].trim();
+    var right = sepMatch[2].trim();
+    if (left && right) {
+      /* Recursively split each half if needed */
+      var result = [];
+      var leftLines = splitTitle(left);
+      var rightLines = splitTitle(right);
+      for (var i = 0; i < leftLines.length; i++) result.push(leftLines[i]);
+      for (var i = 0; i < rightLines.length; i++) result.push(rightLines[i]);
+      return result;
+    }
+  }
+
+  /* Also split on colon, but only if both sides are substantial */
+  var colonMatch = trimmed.match(/^(.{8,}?)\s*:\s*(.{4,})$/);
+  if (colonMatch) {
+    var cLeft = colonMatch[1].trim();
+    var cRight = colonMatch[2].trim();
+    if (cLeft && cRight) {
+      var result = [];
+      var cl = splitTitle(cLeft);
+      var cr = splitTitle(cRight);
+      for (var i = 0; i < cl.length; i++) result.push(cl[i]);
+      for (var i = 0; i < cr.length; i++) result.push(cr[i]);
+      return result;
+    }
+  }
+
+  /* ── STEP 2: Find date groups and split before them ── */
+  var words = trimmed.split(/\s+/);
+
+  /* Find the start of a "date group" — this includes any preface words */
+  var dateStart = -1;
+  for (var i = 0; i < words.length; i++) {
+    var w = words[i];
+    if (isMonthWord(w) || isPeriodLabel(w) || isDatePattern(w)) {
+      /* Walk backwards to include preface words like "as of", "updated", "for" */
+      dateStart = i;
+      while (dateStart > 0 && DATE_PREFACE.indexOf(words[dateStart - 1].toLowerCase()) !== -1) {
+        dateStart--;
+      }
+      break;
+    }
+    /* A bare year like "2026" only counts if it follows something */
+    if (isYear(w) && i > 0) {
+      dateStart = i;
+      while (dateStart > 0 && DATE_PREFACE.indexOf(words[dateStart - 1].toLowerCase()) !== -1) {
+        dateStart--;
+      }
+      break;
+    }
+  }
+
+  if (dateStart > 0) {
+    var beforeDate = words.slice(0, dateStart).join(' ');
+    var dateGroup = words.slice(dateStart).join(' ');
+    if (beforeDate.trim() && dateGroup.trim()) {
+      /* Check if there's a parenthetical or status word after the date */
+      /* Keep it with the date line */
+      return [beforeDate.trim(), dateGroup.trim()];
+    }
+  }
+
+  /* ── STEP 3: Split before parentheticals ── */
+  for (var i = 1; i < words.length; i++) {
+    if (isParenthetical(words[i])) {
+      var beforeParen = words.slice(0, i).join(' ');
+      var parenGroup = words.slice(i).join(' ');
+      if (beforeParen.trim()) {
+        /* Attach parenthetical to the previous date line if one exists */
+        var result = splitTitle(beforeParen.trim());
+        /* Add paren to the last line if it fits, otherwise new line */
+        var lastLine = result[result.length - 1];
+        if ((lastLine + ' ' + parenGroup).length <= 40) {
+          result[result.length - 1] = lastLine + ' ' + parenGroup;
+        } else {
+          result.push(parenGroup.trim());
+        }
+        return result;
+      }
+    }
+  }
+
+  /* ── STEP 4: Under 40 chars with no special breaks — single line ── */
+  if (trimmed.length <= 40) return [trimmed];
+
+  /* ── STEP 5: Over 40 chars — word-boundary split ── */
   var lines = [];
   var current = '';
 
   for (var i = 0; i < words.length; i++) {
     var w = words[i];
+
+    /* Force break before date words even in long titles */
+    if (current && (isMonthWord(w) || isPeriodLabel(w) || isDatePattern(w))) {
+      lines.push(current);
+      current = w;
+      continue;
+    }
+
+    /* Don't split a year from its month */
+    if (current && isYear(w)) {
+      var prevWords = current.split(/\s+/);
+      var prevWord = prevWords[prevWords.length - 1];
+      if (isMonthWord(prevWord) || isPeriodLabel(prevWord)) {
+        current += ' ' + w;
+        continue;
+      }
+    }
+
     var test = current ? current + ' ' + w : w;
 
     if (test.length <= 40) {
       current = test;
     } else {
-      /* Before pushing, check if current line ends with a short preposition/article */
-      /* If so, move that word to the next line */
       if (current) {
+        /* Don't end a line with a preposition/article */
         var parts = current.split(/\s+/);
         var lastWord = parts[parts.length - 1].toLowerCase();
         if (parts.length > 1 && KEEP_WITH_NEXT.indexOf(lastWord) !== -1) {
@@ -789,11 +940,11 @@ function buildDocx(title, blocks) {
     + '</w:docDefaults>'
     + '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>'
     + '<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/>'
-    + '<w:pPr><w:spacing w:before="0" w:after="' + tw(12) + '"/></w:pPr>'
+    + '<w:pPr><w:spacing w:before="' + tw(8) + '" w:after="' + tw(2) + '"/></w:pPr>'
     + '<w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/>'
     + '<w:sz w:val="' + hp(14) + '"/><w:szCs w:val="' + hp(14) + '"/><w:color w:val="' + BLUE + '"/></w:rPr></w:style>'
     + '<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/>'
-    + '<w:pPr><w:spacing w:before="0" w:after="' + tw(12) + '"/></w:pPr>'
+    + '<w:pPr><w:spacing w:before="' + tw(8) + '" w:after="' + tw(2) + '"/></w:pPr>'
     + '<w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:b/><w:bCs/>'
     + '<w:sz w:val="' + hp(13) + '"/><w:szCs w:val="' + hp(13) + '"/><w:color w:val="' + BLUE + '"/></w:rPr></w:style>'
     + '<w:style w:type="paragraph" w:styleId="ListBullet"><w:name w:val="List Bullet"/>'
