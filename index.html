@@ -176,7 +176,7 @@ var mdBadge      = document.getElementById('mdBadge');
 var richBadge    = document.getElementById('richBadge');
 
 var debounceTimer = null;
-var lastPastedHTML = '';  /* Store clipboard HTML for rich text detection */
+var lastPastedHTML = '';
 
 /* ============================================================
    EVENT LISTENERS
@@ -197,7 +197,6 @@ textInput.addEventListener('input', function () {
 });
 
 textInput.addEventListener('paste', function (e) {
-  /* Capture the rich HTML from clipboard before textarea strips it */
   if (e.clipboardData) {
     var html = e.clipboardData.getData('text/html');
     if (html) {
@@ -288,60 +287,39 @@ function xmlEsc(s) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+function cleanTitle(t) {
+  t = t.replace(/^#{1,6}\s*/, '');
+  t = t.replace(/\*\*/g, '');
+  t = t.replace(/[*_`]/g, '');
+  return t.trim();
+}
+
 /* ============================================================
    SMART TITLE SPLITTING
-   Keeps logical phrases together (prepositions, articles stay
-   with the next word; doesn't break "Long-Term Investors", etc.)
    ============================================================ */
 var KEEP_WITH_NEXT = ['for', 'the', 'a', 'an', 'and', 'or', 'of', 'in', 'on', 'at', 'to', 'by', 'with', 'from', 'as', 'is', 'its', 'not', 'but', 'nor', 'per', 'via'];
 
-/* Months */
 var MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december', 'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
-/* Quarter/fiscal labels */
 var PERIOD_LABELS = ['q1', 'q2', 'q3', 'q4', 'fy', 'cy', 'ytd', 'mtd', 'h1', 'h2'];
-/* Status/version words that should stay with the date group */
 var STATUS_WORDS = ['draft', 'final', 'revised', 'updated', 'version', 'confidential', 'internal', 'external', 'preliminary'];
-/* Words that signal "break before me" when they precede a date */
 var DATE_PREFACE = ['as', 'of', 'dated', 'updated', 'revised', 'effective', 'through', 'ending', 'for'];
 
-function isMonthWord(word) {
-  return MONTHS.indexOf(word.toLowerCase()) !== -1;
-}
-function isPeriodLabel(word) {
-  return PERIOD_LABELS.indexOf(word.toLowerCase()) !== -1;
-}
-function isYear(word) {
-  return /^[''\u2018\u2019]?\d{2,4}$/.test(word);
-}
-function isDatePattern(word) {
-  return /^\d{1,2}[\/\-]\d{2,4}$/.test(word) || /^\d{4}[\/\-]\d{1,2}$/.test(word);
-}
-function isStatusWord(word) {
-  return STATUS_WORDS.indexOf(word.toLowerCase().replace(/[()]/g, '')) !== -1;
-}
-function isParenthetical(word) {
-  return /^\(.*\)$/.test(word);
-}
+function isMonthWord(word) { return MONTHS.indexOf(word.toLowerCase()) !== -1; }
+function isPeriodLabel(word) { return PERIOD_LABELS.indexOf(word.toLowerCase()) !== -1; }
+function isYear(word) { return /^[''\u2018\u2019]?\d{2,4}$/.test(word); }
+function isDatePattern(word) { return /^\d{1,2}[\/\-]\d{2,4}$/.test(word) || /^\d{4}[\/\-]\d{1,2}$/.test(word); }
+function isStatusWord(word) { return STATUS_WORDS.indexOf(word.toLowerCase().replace(/[()]/g, '')) !== -1; }
+function isParenthetical(word) { return /^\(.*\)$/.test(word); }
 
-/*
-  Smart title splitter. Priority order:
-  1. Split on explicit separators: — – - : |
-  2. Split before date groups (month+year, Q1 2026, etc.)
-  3. Split before parentheticals like (Draft) (Confidential)
-  4. Split before status words (Draft, Final, Updated) if they precede a date
-  5. Fall back to 40-char word-boundary split with keep-with-next logic
-  6. Never split a month from its year
-*/
 function splitTitle(title) {
   var trimmed = title.trim();
 
-  /* ── STEP 1: Split on explicit separators ── */
+  /* STEP 1: Split on explicit separators */
   var sepMatch = trimmed.match(/^(.+?)\s*[—–\|]\s*(.+)$/);
   if (sepMatch) {
     var left = sepMatch[1].trim();
     var right = sepMatch[2].trim();
     if (left && right) {
-      /* Recursively split each half if needed */
       var result = [];
       var leftLines = splitTitle(left);
       var rightLines = splitTitle(right);
@@ -351,7 +329,6 @@ function splitTitle(title) {
     }
   }
 
-  /* Also split on colon, but only if both sides are substantial */
   var colonMatch = trimmed.match(/^(.{8,}?)\s*:\s*(.{4,})$/);
   if (colonMatch) {
     var cLeft = colonMatch[1].trim();
@@ -366,7 +343,7 @@ function splitTitle(title) {
     }
   }
 
-  /* ── STEP 2: Find date groups and split before them — ALWAYS ── */
+  /* STEP 2: Find date groups and split before them — ALWAYS */
   var words = trimmed.split(/\s+/);
 
   var dateStart = -1;
@@ -392,22 +369,19 @@ function splitTitle(title) {
     var beforeDate = words.slice(0, dateStart).join(' ');
     var dateGroup = words.slice(dateStart).join(' ');
     if (beforeDate.trim() && dateGroup.trim()) {
-      /* Recursively split the non-date part if it's over 40 chars */
       var mainLines = (beforeDate.length > 40) ? splitTitle(beforeDate) : [beforeDate.trim()];
       mainLines.push(dateGroup.trim());
       return mainLines;
     }
   }
 
-  /* ── STEP 3: Split before parentheticals ── */
+  /* STEP 3: Split before parentheticals */
   for (var i = 1; i < words.length; i++) {
     if (isParenthetical(words[i])) {
       var beforeParen = words.slice(0, i).join(' ');
       var parenGroup = words.slice(i).join(' ');
       if (beforeParen.trim()) {
-        /* Attach parenthetical to the previous date line if one exists */
         var result = splitTitle(beforeParen.trim());
-        /* Add paren to the last line if it fits, otherwise new line */
         var lastLine = result[result.length - 1];
         if ((lastLine + ' ' + parenGroup).length <= 40) {
           result[result.length - 1] = lastLine + ' ' + parenGroup;
@@ -419,24 +393,22 @@ function splitTitle(title) {
     }
   }
 
-  /* ── STEP 4: Under 40 chars with no special breaks — single line ── */
+  /* STEP 4: Under 40 chars — single line */
   if (trimmed.length <= 40) return [trimmed];
 
-  /* ── STEP 5: Over 40 chars — word-boundary split ── */
+  /* STEP 5: Over 40 chars — word-boundary split */
   var lines = [];
   var current = '';
 
   for (var i = 0; i < words.length; i++) {
     var w = words[i];
 
-    /* Force break before date words even in long titles */
     if (current && (isMonthWord(w) || isPeriodLabel(w) || isDatePattern(w))) {
       lines.push(current);
       current = w;
       continue;
     }
 
-    /* Don't split a year from its month */
     if (current && isYear(w)) {
       var prevWords = current.split(/\s+/);
       var prevWord = prevWords[prevWords.length - 1];
@@ -452,7 +424,6 @@ function splitTitle(title) {
       current = test;
     } else {
       if (current) {
-        /* Don't end a line with a preposition/article */
         var parts = current.split(/\s+/);
         var lastWord = parts[parts.length - 1].toLowerCase();
         if (parts.length > 1 && KEEP_WITH_NEXT.indexOf(lastWord) !== -1) {
@@ -474,30 +445,38 @@ function splitTitle(title) {
 }
 
 /* ============================================================
-   CONTENT EXTRACTION — handles both rich text and markdown
+   CONTENT EXTRACTION
    ============================================================ */
 function getContent() {
-  var html = textInput.innerHTML;
-  var text = textInput.textContent || textInput.innerText || '';
+  var text = textInput.value || '';
 
-  var hasRichBold = /<(b|strong)[^>]*>/i.test(html);
-  var hasMarkdown = /\*\*[^*]+\*\*/.test(text) || /^#{1,6}\s/m.test(text) || /^[-*]\s/m.test(text);
-
-  if (hasRichBold) {
-    mdBadge.style.display = 'none';
-    richBadge.style.display = 'inline';
-  } else if (hasMarkdown) {
-    mdBadge.style.display = 'inline';
-    richBadge.style.display = 'none';
-  } else {
-    mdBadge.style.display = 'none';
-    richBadge.style.display = 'none';
-  }
+  /* Always parse the plain text from the textarea using markdown parser.
+     The textarea shows exactly what you pasted — that's the source of truth.
+     Rich HTML from clipboard is only used if the plain text has NO markdown
+     markers at all (meaning it came from Word/Docs/email, not ChatGPT). */
+  var hasMarkdown = /\*\*[^*]+\*\*/.test(text) || /^#{1,6}\s/m.test(text) || /^[-*\u2022]\s/m.test(text) || /^\d+[.\)]\s/m.test(text);
 
   var blocks;
-  if (hasRichBold && !hasMarkdown) {
-    blocks = parseRichHTML(html);
+
+  if (hasMarkdown) {
+    /* ChatGPT-style text — use markdown parser on the plain text */
+    mdBadge.style.display = 'inline';
+    richBadge.style.display = 'none';
+    blocks = parseParagraphs(text);
+  } else if (lastPastedHTML && /<(b|strong)[^>]*>/i.test(lastPastedHTML)) {
+    /* No markdown found, but clipboard had bold HTML — try rich parser */
+    mdBadge.style.display = 'none';
+    richBadge.style.display = 'inline';
+    blocks = parseRichHTML(lastPastedHTML);
+    /* If rich parsing failed, fall back to plain text */
+    if (!blocks || blocks.length === 0) {
+      blocks = parseParagraphs(text);
+      richBadge.style.display = 'none';
+    }
   } else {
+    /* Plain text, no markdown, no rich — just parse as plain */
+    mdBadge.style.display = 'none';
+    richBadge.style.display = 'none';
     blocks = parseParagraphs(text);
   }
 
@@ -552,13 +531,11 @@ function parseRichHTML(html) {
     fullText = fullText.trim();
     if (!fullText) continue;
 
-    /* Check for divider lines */
     if (isDivider(fullText)) {
       blocks.push({ type: 'divider' });
       continue;
     }
 
-    /* Check for quoted callout */
     if (isQuotedLine(fullText)) {
       var cleaned = fullText.replace(/^[\u201C\u201D"]+|[\u201C\u201D"]+$/g, '').trim();
       blocks.push({ type: 'callout', text: cleaned, runs: [{ t: cleaned, b: true }] });
@@ -614,20 +591,16 @@ function walkNodes(node, isBold, runs) {
 /* ============================================================
    DETECTION HELPERS
    ============================================================ */
-/* Detect horizontal rule / divider lines */
 function isDivider(text) {
   var t = text.trim();
   if (t.length === 0) return false;
-  /* Long dash lines, underscores, equals, or unicode horizontal bars */
-  if (/^[\u2500-\u257F\u2014\u2015\u2012\u2013—–\-_=*]{3,}$/.test(t)) return true;
+  if (/^[\u2500-\u257F\u2014\u2015\u2012\u2013\u2014\u2015—–\-_=*]{3,}$/.test(t)) return true;
   if (/^[-_=*]{3,}$/.test(t)) return true;
   return false;
 }
 
-/* Detect quoted callout lines — starts and ends with quotes */
 function isQuotedLine(text) {
   var t = text.trim();
-  /* Standard quotes */
   if ((t.charAt(0) === '"' && t.charAt(t.length - 1) === '"') ||
       (t.charAt(0) === '\u201C' && t.charAt(t.length - 1) === '\u201D') ||
       (t.charAt(0) === '"' && t.charAt(t.length - 1) === '\u201D') ||
@@ -683,13 +656,11 @@ function parseParagraphs(raw) {
     var tr = lines[i].trim();
     if (!tr) { i++; continue; }
 
-    /* Divider lines */
     if (isDivider(tr)) {
       blocks.push({ type: 'divider' });
       i++; continue;
     }
 
-    /* Heading with # */
     var hM = tr.match(/^(#{1,6})\s+(.*)/);
     if (hM) {
       var lv = hM[1].length;
@@ -698,7 +669,6 @@ function parseParagraphs(raw) {
       i++; continue;
     }
 
-    /* Bold-only line as heading */
     var bL = tr.match(/^\*\*(.+?)\*\*$/);
     if (bL && tr.length < 120) {
       var tx = cleanInline(bL[1]);
@@ -706,28 +676,24 @@ function parseParagraphs(raw) {
       i++; continue;
     }
 
-    /* Quoted callout line */
     if (isQuotedLine(tr)) {
       var cleaned = tr.replace(/^[\u201C\u201D"*]+|[\u201C\u201D"*]+$/g, '').trim();
       blocks.push({ type: 'callout', text: cleaned, runs: [{ t: cleaned, b: true }] });
       i++; continue;
     }
 
-    /* Bullet (handles tab-indented bullets too) */
     var buM = tr.match(/^[\t ]*[-*\u2022]\s+(.*)/);
     if (buM) {
       blocks.push({ type: 'bullet', text: cleanInline(buM[1]), runs: parseInlineRuns(buM[1]) });
       i++; continue;
     }
 
-    /* Numbered list */
     var nM = tr.match(/^[\t ]*\d+[.\)]\s+(.*)/);
     if (nM) {
       blocks.push({ type: 'bullet', text: cleanInline(nM[1]), runs: parseInlineRuns(nM[1]) });
       i++; continue;
     }
 
-    /* Normal paragraph */
     var para = tr;
     i++;
     while (i < lines.length && lines[i].trim() &&
@@ -801,7 +767,6 @@ function makeBody(blocks) {
     var b = blocks[i];
 
     if (b.type === 'h1') {
-      /* Extra space before H1 (except first element) */
       var beforeH1 = (i === 0) ? '0' : '' + tw(8);
       xml += '<w:p><w:pPr><w:pStyle w:val="Heading1"/>'
         + '<w:spacing w:before="' + beforeH1 + '" w:after="' + tw(2) + '" w:line="240" w:lineRule="auto"/>'
@@ -812,7 +777,6 @@ function makeBody(blocks) {
         + '<w:t xml:space="preserve">' + xmlEsc(b.text) + '</w:t></w:r></w:p>';
 
     } else if (b.type === 'h2') {
-      /* Extra space before H2 */
       var beforeH2 = (i === 0) ? '0' : '' + tw(8);
       xml += '<w:p><w:pPr><w:pStyle w:val="Heading2"/>'
         + '<w:spacing w:before="' + beforeH2 + '" w:after="' + tw(2) + '" w:line="240" w:lineRule="auto"/>'
@@ -823,14 +787,12 @@ function makeBody(blocks) {
         + '<w:t xml:space="preserve">' + xmlEsc(b.text) + '</w:t></w:r></w:p>';
 
     } else if (b.type === 'divider') {
-      /* Section break — extra vertical space */
       xml += '<w:p><w:pPr>'
         + '<w:spacing w:before="' + tw(6) + '" w:after="' + tw(6) + '" w:line="240" w:lineRule="auto"/>'
         + '<w:pBdr><w:bottom w:val="single" w:sz="4" w:space="1" w:color="' + BLUE + '"/></w:pBdr>'
         + '</w:pPr></w:p>';
 
     } else if (b.type === 'callout') {
-      /* Bold, blue, indented callout */
       xml += '<w:p><w:pPr>'
         + '<w:spacing w:before="' + tw(4) + '" w:after="' + tw(4) + '" w:line="240" w:lineRule="auto"/>'
         + '<w:ind w:left="' + Math.round(TWIP_INCH * 0.4) + '"/>'
@@ -855,14 +817,6 @@ function makeBody(blocks) {
     }
   }
   return xml;
-}
-
-function cleanTitle(t) {
-  /* Strip any markdown artifacts from the title */
-  t = t.replace(/^#{1,6}\s*/, '');
-  t = t.replace(/\*\*/g, '');
-  t = t.replace(/[*_`]/g, '');
-  return t.trim();
 }
 
 function makeHeaderXml(title) {
