@@ -627,9 +627,15 @@ function parseParagraphs(raw) {
   /* Post-process: mark headings that are followed by another heading as 'section'.
      Skip over dividers when checking — two headings separated only by a divider still count. */
   var headingTypes = ['h1', 'h2', 'h3'];
-  for (var j = 0; j < blocks.length - 1; j++) {
+  for (var j = 0; j < blocks.length; j++) {
     var curr = blocks[j];
     if (headingTypes.indexOf(curr.type) === -1) continue;
+
+    /* Make sure ALL headings get blue styling — force runs to bold */
+    if (!curr.runs || curr.runs.length === 0) {
+      curr.runs = [{ t: curr.text, b: true }];
+    }
+
     /* Look ahead for next non-divider block */
     var nextIdx = j + 1;
     while (nextIdx < blocks.length && blocks[nextIdx].type === 'divider') nextIdx++;
