@@ -36,7 +36,7 @@ button{padding:14px 28px;font-family:'Lexend',sans-serif;font-size:1rem;font-wei
 </head>
 <body>
 <h1>ChatGPT &#8594; Word Document</h1>
-<p class="subtitle">Paste ChatGPT output or formatted text below. <span style="color:#334155">v3.0</span></p>
+<p class="subtitle">Paste ChatGPT output or formatted text below. <span style="color:#334155">v3.1</span></p>
 <div class="container">
   <div>
     <label>Document Title (used in header)</label>
@@ -279,12 +279,13 @@ function postProcess(blocks){
     }
   }
 
-  /* Auto-insert dividers before major sections after long content runs */
+  /* Auto-insert extra spacing before major sections after long content runs (no divider lines) */
   var enhanced=[],sinceHead=0;
   for(var j=0;j<blocks.length;j++){
     var b=blocks[j];
-    if(b.type==='section'){if(sinceHead>=5&&j>0)enhanced.push({type:'divider'});sinceHead=0;}
-    else if(b.type!=='divider')sinceHead++;
+    if(b.type==='divider'){continue;} /* Skip all dividers */
+    if(b.type==='section'){if(sinceHead>=5&&j>0)b.extraSpace=true;sinceHead=0;}
+    else sinceHead++;
     enhanced.push(b);
   }
   blocks=enhanced;
@@ -339,7 +340,7 @@ function mkBody(blocks){
     var b=blocks[i];
 
     if(b.type==='section'){
-      var bf=i===0?'0':''+tw(10);
+      var bf=i===0?'0':b.extraSpace?''+tw(16):''+tw(10);
       var ul=b.underline||false;
       x+='<w:p><w:pPr><w:pStyle w:val="Heading1"/><w:spacing w:before="'+bf+'" w:after="'+tw(3)+'" w:line="240" w:lineRule="auto"/></w:pPr>'
         +mkRun(b.text,15,BLUE,true,ul)+'</w:p>';
@@ -359,9 +360,6 @@ function mkBody(blocks){
     }else if(b.type==='note'){
       x+='<w:p><w:pPr><w:spacing w:before="0" w:after="'+tw(3)+'" w:line="240" w:lineRule="auto"/></w:pPr>'
         +mkRun(b.text,11,GRAY,false,false)+'</w:p>';
-
-    }else if(b.type==='divider'){
-      x+='<w:p><w:pPr><w:spacing w:before="'+tw(4)+'" w:after="'+tw(4)+'" w:line="240" w:lineRule="auto"/><w:pBdr><w:bottom w:val="single" w:sz="4" w:space="2" w:color="'+BLUE+'"/></w:pBdr></w:pPr></w:p>';
 
     }else if(b.type==='bullet'){
       x+='<w:p><w:pPr><w:pStyle w:val="ListBullet"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr><w:spacing w:before="0" w:after="'+tw(2)+'" w:line="240" w:lineRule="auto"/></w:pPr>'
