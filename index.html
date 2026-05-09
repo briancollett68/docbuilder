@@ -36,7 +36,7 @@ button{padding:14px 28px;font-family:'Lexend',sans-serif;font-size:1rem;font-wei
 </head>
 <body>
 <h1>ChatGPT &#8594; Word Document</h1>
-<p class="subtitle">Paste ChatGPT output or formatted text below. <span style="color:#334155">v3.7</span></p>
+<p class="subtitle">Paste ChatGPT output or formatted text below. <span style="color:#334155">v3.8</span></p>
 <div class="container">
   <div>
     <label>Document Title (used in header)</label>
@@ -108,6 +108,34 @@ function checkReady(){buildBtn.disabled=!(getText().trim().length>0&&titleInput.
 function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function xmlEsc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function cleanTitle(t){return t.replace(/^#{1,6}\s*/,'').replace(/\*\*/g,'').replace(/[*_`]/g,'').trim();}
+
+/* Auto-detect a good title from the pasted content */
+function detectTitle(text){
+  var lines=text.split(/\n/);
+  /* Strategy 1: Look for the first # heading */
+  for(var i=0;i<Math.min(20,lines.length);i++){
+    var tr=lines[i].trim();
+    if(!tr)continue;
+    var hM=tr.match(/^#{1,2}\s+(.*)/);
+    if(hM){
+      var title=cleanTitle(hM[1]);
+      /* Skip generic headings */
+      if(title.length>3&&title.length<80) return title;
+    }
+  }
+  /* Strategy 2: First non-empty line if it's short and looks like a title */
+  for(var i=0;i<Math.min(5,lines.length);i++){
+    var tr=lines[i].trim();
+    if(!tr)continue;
+    var cleaned=cleanTitle(tr);
+    if(cleaned.length>3&&cleaned.length<80){
+      var lastChar=cleaned.charAt(cleaned.length-1);
+      if('.!?;,'.indexOf(lastChar)===-1) return cleaned;
+    }
+    break;
+  }
+  return '';
+}
 
 function getBlocks(){
   var html=textInput.innerHTML,text=getText();
