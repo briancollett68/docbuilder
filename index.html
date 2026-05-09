@@ -36,7 +36,7 @@ button{padding:14px 28px;font-family:'Lexend',sans-serif;font-size:1rem;font-wei
 </head>
 <body>
 <h1>ChatGPT &#8594; Word Document</h1>
-<p class="subtitle">Paste ChatGPT output or formatted text below. <span style="color:#334155">v3.6</span></p>
+<p class="subtitle">Paste ChatGPT output or formatted text below. <span style="color:#334155">v3.7</span></p>
 <div class="container">
   <div>
     <label>Document Title (used in header)</label>
@@ -245,28 +245,33 @@ function parseMarkdown(raw){
       continue;
     }
 
-    /* Malformed table detection — AvoidBetter or HeaderHeader pattern */
+    /* Malformed table detection — AvoidBetter or HeaderHeader pattern
+       Just split on quote marks and put each quoted piece on its own line */
     var malTable=tr.match(/^([A-Z][a-z]+)([A-Z][a-z]+)([\u201C"'].+)$/);
     if(malTable){
       var h1=malTable[1], h2=malTable[2], rest=malTable[3];
-      var quoteRe=/[\u201C"']([^"\u201D\u2019]*?)[\u201D"']/g;
-      var quotes=[],qm;
-      var fullText=rest;
+      /* Collect continuation lines */
       i++;
       while(i<lines.length&&lines[i].trim()&&!lines[i].trim().match(/^(#{1,6}\s|[-*\u2022]\s|\*\*.+\*\*$|>)/)){
-        fullText+=' '+lines[i].trim();i++;
+        rest+=' '+lines[i].trim();i++;
       }
-      while((qm=quoteRe.exec(fullText))!==null) quotes.push(qm[1]);
+      /* Extract all quoted strings */
+      var quoteRe=/[\u201C"']([^"\u201D\u2019]+?)[\u201D"']/g;
+      var quotes=[],qm;
+      while((qm=quoteRe.exec(rest))!==null) quotes.push(qm[1].trim());
       if(quotes.length>=2){
+        /* Output header labels */
+        blocks.push({type:'subsection',text:h1+' / '+h2,runs:[{t:h1+' / '+h2,b:true}]});
+        /* Output pairs on alternating lines */
         for(var q=0;q<quotes.length;q+=2){
           if(q+1<quotes.length){
-            blocks.push({type:'tablepair',label:h1,value:cleanInline(quotes[q])});
-            blocks.push({type:'tablepair',label:h2,value:cleanInline(quotes[q+1])});
-            if(q+2<quotes.length-1) blocks.push({type:'tablegap'});
+            blocks.push({type:'key',text:quotes[q],runs:[{t:quotes[q],b:true}]});
+            blocks.push({type:'body',text:'\u2192 '+quotes[q+1],runs:[{t:'\u2192 '+quotes[q+1],b:false}]});
           }
         }
         continue;
       }
+      /* If parsing failed, fall through to normal processing */
       i--;
     }
 
