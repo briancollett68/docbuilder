@@ -36,7 +36,7 @@ button{padding:14px 28px;font-family:'Lexend',sans-serif;font-size:1rem;font-wei
 </head>
 <body>
 <h1>ChatGPT &#8594; Word Document</h1>
-<p class="subtitle">Paste ChatGPT output or formatted text below. <span style="color:#334155">v3.1</span></p>
+<p class="subtitle">Paste ChatGPT output or formatted text below. <span style="color:#334155">v3.2</span></p>
 <div class="container">
   <div>
     <label>Document Title (used in header)</label>
@@ -192,7 +192,42 @@ function parseMarkdown(raw){
     var tr=lines[i].trim();
     if(!tr){i++;continue;}
 
-    if(isDivider(tr)){blocks.push({type:'divider'});i++;continue;}
+    if(isDivider(tr)){i++;continue;}
+
+    /* > Block quote → sticky line */
+    var bq=tr.match(/^>\s*(.*)/);
+    if(bq){
+      var quoteText=bq[1].trim();
+      /* Collect continuation lines */
+      i++;
+      while(i<lines.length&&lines[i].trim()&&(lines[i].trim().charAt(0)==='>'||(!lines[i].trim().match(/^(#{1,6}\s|[\t ]*[-*\u2022]\s|[\t ]*\d+[.\)]\s|\*\*.+\*\*$|\|)/)&&lines[i].trim().length>0&&lines[i].trim().charAt(0)!=='#'))){
+        var contLine=lines[i].trim();
+        if(contLine.charAt(0)==='>') contLine=contLine.substring(1).trim();
+        quoteText+=' '+contLine;
+        i++;
+      }
+      quoteText=quoteText.replace(/^[\u201C\u201D"]+|[\u201C\u201D"]+$/g,'').trim();
+      blocks.push({type:'sticky',text:cleanInline(quoteText),runs:[{t:cleanInline(quoteText),b:true}]});
+      continue;
+    }
+
+    /* | Table detection */
+    if(tr.charAt(0)==='|'||tr.indexOf('|')>0&&tr.indexOf('|')<tr.length-1){
+      var tableRows=[];
+      while(i<lines.length&&lines[i].trim()&&lines[i].trim().indexOf('|')!==-1){
+        var row=lines[i].trim();
+        /* Skip separator rows like |---|---| */
+        if(!/^[\|\s\-:]+$/.test(row)){
+          var cells=row.split('|').map(function(c){return c.trim();}).filter(function(c){return c.length>0;});
+          if(cells.length>0) tableRows.push(cells);
+        }
+        i++;
+      }
+      if(tableRows.length>0){
+        blocks.push({type:'table',rows:tableRows});
+      }
+      continue;
+    }
 
     /* # or ## heading → major section */
     var h1=tr.match(/^#{1,2}\s+(.*)/);
@@ -315,6 +350,11 @@ function showPreview(){
     else if(b.type==='sticky')h+='<div style="color:#818cf8;font-weight:700;padding-left:8px">\u275D '+esc(b.text.substring(0,80))+'</div>';
     else if(b.type==='note')h+='<div style="color:#64748b;font-size:.75rem">NOTE: '+esc(b.text.substring(0,80))+(b.text.length>80?'\u2026':'')+'</div>';
     else if(b.type==='divider')h+='<div style="color:#475569;font-size:.7rem">\u2500\u2500\u2500</div>';
+    else if(b.type==='table'){
+      h+='<div style="font-size:.75rem;color:#64748b">TABLE: '+b.rows.length+' rows, '+b.rows[0].length+' cols';
+      if(b.rows.length>0) h+=' \u2014 '+esc(b.rows[0].join(' | '));
+      h+='</div>';
+    }
     else if(b.type==='bullet')h+='<div style="padding-left:16px">\u2022 '+esc(b.text.substring(0,80))+(b.text.length>80?'\u2026':'')+'</div>';
     else h+='<div>'+esc(b.text.substring(0,90))+(b.text.length>90?'\u2026':'')+'</div>';
   }
@@ -364,6 +404,51 @@ function mkBody(blocks){
     }else if(b.type==='bullet'){
       x+='<w:p><w:pPr><w:pStyle w:val="ListBullet"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr><w:spacing w:before="0" w:after="'+tw(2)+'" w:line="240" w:lineRule="auto"/></w:pPr>'
         +mkRuns(b.runs,12,'000000')+'</w:p>';
+
+    }else if(b.type==='table'){
+      /* Build a Word table */
+      var rows=b.rows;
+      var numCols=0;
+      for(var r=0;r<rows.length;r++){if(rows[r].length>numCols)numCols=rows[r].length;}
+      var colWidth=Math.floor((12240-MG*2)/numCols);
+
+      x+='<w:tbl><w:tblPr><w:tblStyle w:val="Normal"/><w:tblW w:w="0" w:type="auto"/>'
+        +'<w:tblBorders>'
+        +'<w:top w:val="single" w:sz="4" w:space="0" w:color="'+BLUE+'"/>'
+        +'<w:left w:val="single" w:sz="4" w:space="0" w:color="'+BLUE+'"/>'
+        +'<w:bottom w:val="single" w:sz="4" w:space="0" w:color="'+BLUE+'"/>'
+        +'<w:right w:val="single" w:sz="4" w:space="0" w:color="'+BLUE+'"/>'
+        +'<w:insideH w:val="single" w:sz="4" w:space="0" w:color="'+BLUE+'"/>'
+        +'<w:insideV w:val="single" w:sz="4" w:space="0" w:color="'+BLUE+'"/>'
+        +'</w:tblBorders>'
+        +'<w:tblCellMar><w:top w:w="40" w:type="dxa"/><w:left w:w="80" w:type="dxa"/><w:bottom w:w="40" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tblCellMar>'
+        +'</w:tblPr>'
+        +'<w:tblGrid>';
+      for(var c=0;c<numCols;c++) x+='<w:gridCol w:w="'+colWidth+'"/>';
+      x+='</w:tblGrid>';
+
+      for(var r=0;r<rows.length;r++){
+        var isHeader=(r===0);
+        x+='<w:tr>';
+        for(var c=0;c<numCols;c++){
+          var cellText=(c<rows[r].length)?rows[r][c]:'';
+          cellText=cleanInline(cellText);
+          var cellColor=isHeader?BLUE:'000000';
+          var cellBold=isHeader;
+          var cellSz=isHeader?12:11;
+          /* Header row gets blue shading */
+          x+='<w:tc><w:tcPr><w:tcW w:w="'+colWidth+'" w:type="dxa"/>';
+          if(isHeader) x+='<w:shd w:val="clear" w:color="auto" w:fill="E8EEF7"/>';
+          x+='</w:tcPr>';
+          x+='<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/></w:pPr>'
+            +mkRun(cellText,cellSz,cellColor,cellBold,false)+'</w:p>';
+          x+='</w:tc>';
+        }
+        x+='</w:tr>';
+      }
+      x+='</w:tbl>';
+      /* Add small space after table */
+      x+='<w:p><w:pPr><w:spacing w:before="'+tw(2)+'" w:after="'+tw(3)+'" w:line="240" w:lineRule="auto"/></w:pPr></w:p>';
 
     }else{
       x+='<w:p><w:pPr><w:spacing w:before="0" w:after="'+tw(3)+'" w:line="240" w:lineRule="auto"/></w:pPr>'
