@@ -11,7 +11,6 @@ body{font-family:'Lexend',sans-serif;background:#0f172a;color:#e2e8f0;min-height
 h1{font-size:1.6rem;color:#93c5fd;margin-bottom:4px;text-align:center}
 .subtitle{color:#64748b;font-size:.85rem;margin-bottom:20px;text-align:center}
 .container{width:100%;max-width:800px;display:flex;flex-direction:column;gap:16px}
-.top-bar{position:sticky;top:0;z-index:10;background:#0f172a;padding:12px 0 8px 0;display:flex;flex-direction:column;gap:12px;border-bottom:1px solid #1e293b}
 label{font-size:.85rem;color:#94a3b8;font-weight:700}
 #textInput{width:100%;min-height:340px;background:#1e293b;border:1px solid #334155;border-radius:10px;color:#e2e8f0;font-family:'Lexend',sans-serif;font-size:.9rem;padding:14px;outline:none;transition:border .2s;overflow-y:auto;white-space:pre-wrap;word-wrap:break-word}
 #textInput:focus{border-color:#3b82f6}
@@ -29,7 +28,6 @@ button{padding:14px 28px;font-family:'Lexend',sans-serif;font-size:1rem;font-wei
 .status.err{color:#f87171}
 .status.loading{color:#facc15}
 .preview{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:14px;font-size:.8rem;color:#94a3b8;max-height:200px;overflow-y:auto;line-height:1.5}
-.preview b{color:#93c5fd}
 .title-preview{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:10px;text-align:center;font-size:.8rem;color:#60a5fa;line-height:1.6;display:none}
 .title-preview span{color:#64748b;font-size:.7rem;display:block;margin-bottom:4px}
 .input-hint{font-size:.7rem;color:#475569;margin-top:4px}
@@ -37,29 +35,30 @@ button{padding:14px 28px;font-family:'Lexend',sans-serif;font-size:1rem;font-wei
 </head>
 <body>
 <h1>ChatGPT &#8594; Word Document</h1>
-<p class="subtitle">Paste ChatGPT output or formatted text below. <span style="color:#334155">v3.9</span></p>
+<p class="subtitle">Paste ChatGPT output or formatted text. <span style="color:#334155">v4.1</span></p>
 <div class="container">
   <div>
-    <label>Document Title (used in header)</label>
+    <label>Document Title</label>
     <div class="title-row" style="margin-top:6px">
-      <input type="text" id="titleInput" placeholder="Type your document title here…">
+      <input type="text" id="titleInput" placeholder="Auto-filled on paste — edit anytime">
       <span class="char-count" id="charCount">0 chars</span>
     </div>
     <div class="title-preview" id="titlePreview"><span>Header preview:</span></div>
   </div>
-
   <button class="btn-primary" id="buildBtn" disabled>Generate .docx</button>
   <div class="status" id="status"></div>
-
   <div>
     <label>Paste Your Text</label>
     <div id="textInput" contenteditable="true"></div>
-    <div class="input-hint">Supports ## headings, ### sub-headings, **bold**, - bullets, "quoted callouts", and auto-detects key statements.</div>
+    <div class="input-hint">Supports ## headings, ### sub-headings, **bold**, - bullets, > block quotes, | tables, "quoted callouts"</div>
   </div>
   <div id="previewBox" class="preview" style="display:none"></div>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>
+/* ================================================================
+   ELEMENT REFS
+   ================================================================ */
 var textInput=document.getElementById('textInput');
 var titleInput=document.getElementById('titleInput');
 var buildBtn=document.getElementById('buildBtn');
@@ -67,69 +66,74 @@ var statusEl=document.getElementById('status');
 var previewBox=document.getElementById('previewBox');
 var charCount=document.getElementById('charCount');
 var titlePreview=document.getElementById('titlePreview');
-var debounceTimer=null;
+var debounce=null;
 
+/* ================================================================
+   EVENTS
+   ================================================================ */
 textInput.addEventListener('input',function(){
   checkReady();
-  clearTimeout(debounceTimer);
-  debounceTimer=setTimeout(function(){if(getText().trim())showPreview();else previewBox.style.display='none';},300);
+  clearTimeout(debounce);
+  debounce=setTimeout(function(){if(getText().trim())showPreview();else previewBox.style.display='none';},300);
 });
 textInput.addEventListener('paste',function(){
-  setTimeout(function(){if(getText().trim()){showPreview();checkReady();}},100);
+  setTimeout(function(){
+    var t=getText().trim();
+    if(t){showPreview();checkReady();
+      if(!titleInput.value.trim()){
+        var d=detectTitle(t);
+        if(d){titleInput.value=d;charCount.textContent=d.length+' chars';updateTitlePreview();checkReady();}
+      }
+    }
+  },100);
 });
-titleInput.addEventListener('input',function(){
-  checkReady();
-  var v=titleInput.value;
-  charCount.textContent=v.length+' chars';
-  if(v.trim()){
-    var lines=splitTitle(cleanTitle(v.trim()));
-    var h='<span>Header preview:</span>';
-    for(var i=0;i<lines.length;i++)h+='<div>'+esc(lines[i])+'</div>';
-    titlePreview.innerHTML=h;titlePreview.style.display='block';
-  }else titlePreview.style.display='none';
-});
-buildBtn.addEventListener('click',function(){
-  statusEl.className='status loading';statusEl.textContent='Building document\u2026';
-  var title=cleanTitle(titleInput.value.trim());
-  var text=getText().trim();
-  if(!text||!title){statusEl.className='status err';statusEl.textContent='Please enter both a title and text.';return;}
+titleInput.addEventListener('input',function(){checkReady();charCount.textContent=titleInput.value.length+' chars';updateTitlePreview();});
+buildBtn.addEventListener('click',generate);
+
+/* ================================================================
+   HELPERS
+   ================================================================ */
+function getText(){return textInput.innerText||textInput.textContent||'';}
+function checkReady(){buildBtn.disabled=!(getText().trim()&&titleInput.value.trim());}
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function xmlEsc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function cleanTitle(t){return t.replace(/^#{1,6}\s*/,'').replace(/\*\*/g,'').replace(/[*_`]/g,'').trim();}
+function detectTitle(text){var lines=text.split(/\n/);for(var i=0;i<lines.length;i++){var tr=lines[i].trim();if(tr)return cleanTitle(tr);}return '';}
+
+function updateTitlePreview(){
+  var v=titleInput.value.trim();
+  if(v){var lines=splitTitle(cleanTitle(v));var h='<span>Header preview:</span>';for(var i=0;i<lines.length;i++)h+='<div>'+esc(lines[i])+'</div>';titlePreview.innerHTML=h;titlePreview.style.display='block';}
+  else titlePreview.style.display='none';
+}
+
+function generate(){
+  statusEl.className='status loading';statusEl.textContent='Building\u2026';
+  var title=cleanTitle(titleInput.value.trim()),text=getText().trim();
+  if(!title||!text){statusEl.className='status err';statusEl.textContent='Enter both title and text.';return;}
   var blocks=getBlocks();
-  if(!blocks||!blocks.length){statusEl.className='status err';statusEl.textContent='Could not parse any content.';return;}
+  if(!blocks||!blocks.length){statusEl.className='status err';statusEl.textContent='No content parsed.';return;}
   buildDocx(title,blocks).then(function(blob){
     var fn=title.replace(/[^a-zA-Z0-9 ]/g,'').replace(/\s+/g,'_').substring(0,50)+'.docx';
     var a=document.createElement('a'),url=URL.createObjectURL(blob);
     a.href=url;a.download=fn;document.body.appendChild(a);a.click();document.body.removeChild(a);
     setTimeout(function(){URL.revokeObjectURL(url);},5000);
-    statusEl.className='status ok';statusEl.textContent='\u2713 Downloaded: '+fn;
-  }).catch(function(e){statusEl.className='status err';statusEl.textContent='Error: '+e.message;console.error(e);});
-});
-
-function getText(){return textInput.innerText||textInput.textContent||'';}
-function checkReady(){buildBtn.disabled=!(getText().trim().length>0&&titleInput.value.trim().length>0);}
-function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
-function xmlEsc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-function cleanTitle(t){return t.replace(/^#{1,6}\s*/,'').replace(/\*\*/g,'').replace(/[*_`]/g,'').trim();}
-
-/* Auto-detect title — just use the first non-empty line */
-function detectTitle(text){
-  var lines=text.split(/\n/);
-  for(var i=0;i<lines.length;i++){
-    var tr=lines[i].trim();
-    if(tr) return cleanTitle(tr);
-  }
-  return '';
+    statusEl.className='status ok';statusEl.textContent='\u2713 '+fn;
+  }).catch(function(e){statusEl.className='status err';statusEl.textContent='Error: '+e.message;});
 }
 
+/* ================================================================
+   CONTENT ROUTING
+   ================================================================ */
 function getBlocks(){
   var html=textInput.innerHTML,text=getText();
-  var hasMd=/\*\*[^*]+\*\*/.test(text)||/^#{1,6}\s/m.test(text);
-  if(hasMd)return parseMarkdown(text);
-  var hasRich=/<(b|strong|h[1-6])[^>]*>/i.test(html);
-  if(hasRich){var b=parseRichHTML(html);if(b&&b.length>0)return b;}
+  if(/\*\*[^*]+\*\*/.test(text)||/^#{1,6}\s/m.test(text))return parseMarkdown(text);
+  if(/<(b|strong|h[1-6])[^>]*>/i.test(html)){var b=parseRichHTML(html);if(b&&b.length)return b;}
   return parseMarkdown(text);
 }
 
-/* ── TITLE SPLITTING ── */
+/* ================================================================
+   TITLE SPLITTING
+   ================================================================ */
 var KWN=['for','the','a','an','and','or','of','in','on','at','to','by','with','from','as','is','its','not','but','nor','per','via'];
 var MOS=['january','february','march','april','may','june','july','august','september','october','november','december','jan','feb','mar','apr','jun','jul','aug','sep','oct','nov','dec'];
 var PER=['q1','q2','q3','q4','fy','cy','ytd','mtd','h1','h2'];
@@ -138,7 +142,6 @@ function isMo(w){return MOS.indexOf(w.toLowerCase())!==-1;}
 function isPe(w){return PER.indexOf(w.toLowerCase())!==-1;}
 function isYr(w){return/^[''\u2018\u2019]?\d{2,4}$/.test(w);}
 function isPa(w){return/^\(.*\)$/.test(w);}
-
 function splitTitle(t){
   t=t.trim();
   var sep=t.match(/^(.+?)\s*[\u2014\u2013|]\s*(.+)$/);
@@ -146,57 +149,40 @@ function splitTitle(t){
   var col=t.match(/^(.{8,}?)\s*:\s*(.{4,})$/);
   if(col&&col[1].trim()&&col[2].trim())return splitTitle(col[1].trim()).concat(splitTitle(col[2].trim()));
   var w=t.split(/\s+/),ds=-1;
-  for(var i=0;i<w.length;i++){
-    if(isMo(w[i])||isPe(w[i])){ds=i;while(ds>0&&DPR.indexOf(w[ds-1].toLowerCase())!==-1)ds--;break;}
-    if(isYr(w[i])&&i>0&&!isMo(w[i-1])){ds=i;while(ds>0&&DPR.indexOf(w[ds-1].toLowerCase())!==-1)ds--;break;}
-  }
+  for(var i=0;i<w.length;i++){if(isMo(w[i])||isPe(w[i])){ds=i;while(ds>0&&DPR.indexOf(w[ds-1].toLowerCase())!==-1)ds--;break;}if(isYr(w[i])&&i>0&&!isMo(w[i-1])){ds=i;while(ds>0&&DPR.indexOf(w[ds-1].toLowerCase())!==-1)ds--;break;}}
   if(ds>0){var bf=w.slice(0,ds).join(' '),dt=w.slice(ds).join(' ');if(bf&&dt){var ml=bf.length>40?splitTitle(bf):[bf];ml.push(dt);return ml;}}
   for(var i=1;i<w.length;i++){if(isPa(w[i])){var bf=w.slice(0,i).join(' '),pa=w.slice(i).join(' ');if(bf){var r=splitTitle(bf);var l=r[r.length-1];if((l+' '+pa).length<=40)r[r.length-1]=l+' '+pa;else r.push(pa);return r;}}}
   if(t.length<=40)return[t];
   var lines=[],cur='';
-  for(var i=0;i<w.length;i++){
-    var wd=w[i];
-    if(cur&&(isMo(wd)||isPe(wd))){lines.push(cur);cur=wd;continue;}
-    if(cur&&isYr(wd)){var p=cur.split(/\s+/);if(isMo(p[p.length-1])||isPe(p[p.length-1])){cur+=' '+wd;continue;}}
-    var test=cur?cur+' '+wd:wd;
-    if(test.length<=40){cur=test;}else{if(cur){var parts=cur.split(/\s+/);var lw=parts[parts.length-1].toLowerCase();if(parts.length>1&&KWN.indexOf(lw)!==-1){var mv=parts.pop();lines.push(parts.join(' '));cur=mv+' '+wd;}else{lines.push(cur);cur=wd;}}else cur=wd;}
-  }
+  for(var i=0;i<w.length;i++){var wd=w[i];if(cur&&(isMo(wd)||isPe(wd))){lines.push(cur);cur=wd;continue;}if(cur&&isYr(wd)){var p=cur.split(/\s+/);if(isMo(p[p.length-1])||isPe(p[p.length-1])){cur+=' '+wd;continue;}}var test=cur?cur+' '+wd:wd;if(test.length<=40){cur=test;}else{if(cur){var parts=cur.split(/\s+/);var lw=parts[parts.length-1].toLowerCase();if(parts.length>1&&KWN.indexOf(lw)!==-1){var mv=parts.pop();lines.push(parts.join(' '));cur=mv+' '+wd;}else{lines.push(cur);cur=wd;}}else cur=wd;}}
   if(cur)lines.push(cur);return lines;
 }
 
-/* ── DETECTION HELPERS ── */
-function isDivider(t){t=t.trim();return t.length>=3&&/^[\u2500-\u257F\u2014\u2015\u2012\u2013\u2E3A\u2E3B—–\-_=*]{3,}$/.test(t);}
-function isQuoted(t){t=t.trim();var a=t.charAt(0),z=t.charAt(t.length-1);return(a==='"'&&z==='"')||(a==='\u201C'&&z==='\u201D')||(a==='"'&&z==='\u201D')||(a==='\u201C'&&z==='"');}
-var NOTE_WORDS=['materials','deck','source','current','formal','risk disclosure','march takeaways','march key','supports','describe','describes'];
-function looksLikeNote(text){
-  var t=text.toLowerCase();
-  if(t.length<60)return false;
-  var count=0;
-  for(var i=0;i<NOTE_WORDS.length;i++){if(t.indexOf(NOTE_WORDS[i])!==-1)count++;}
-  return count>=2;
-}
-
-/* ── INLINE PARSING ── */
-function cleanInline(s){
-  return s.replace(/\*\*\*(.+?)\*\*\*/g,'$1').replace(/\*\*(.+?)\*\*/g,'$1').replace(/\*(.+?)\*/g,'$1').replace(/__(.+?)__/g,'$1').replace(/_(.+?)_/g,'$1').replace(/`(.+?)`/g,'$1').replace(/```/g,'').trim();
-}
+/* ================================================================
+   INLINE PARSING
+   ================================================================ */
+function cleanInline(s){return s.replace(/\*\*\*(.+?)\*\*\*/g,'$1').replace(/\*\*(.+?)\*\*/g,'$1').replace(/\*(.+?)\*/g,'$1').replace(/__(.+?)__/g,'$1').replace(/_(.+?)_/g,'$1').replace(/`(.+?)`/g,'$1').replace(/```/g,'').trim();}
 function parseRuns(s){
   s=s.replace(/\*\*\*(.+?)\*\*\*/g,'**$1**');
   var runs=[],re=/\*\*(.+?)\*\*/g,last=0,m;
-  while((m=re.exec(s))!==null){
-    if(m.index>last){var b=s.substring(last,m.index).replace(/[*_`]/g,'');if(b)runs.push({t:b,b:false});}
-    runs.push({t:m[1],b:true});last=re.lastIndex;
-  }
+  while((m=re.exec(s))!==null){if(m.index>last){var b=s.substring(last,m.index).replace(/[*_`]/g,'');if(b)runs.push({t:b,b:false});}runs.push({t:m[1],b:true});last=re.lastIndex;}
   if(last<s.length){var r=s.substring(last).replace(/[*_`]/g,'');if(r)runs.push({t:r,b:false});}
-  if(!runs.length)runs.push({t:cleanInline(s),b:false});
-  return runs;
-}
-function isAllBold(raw){
-  var t=raw.trim();
-  return/^\*\*[^*]+\*\*$/.test(t);
+  if(!runs.length)runs.push({t:cleanInline(s),b:false});return runs;
 }
 
-/* ── MARKDOWN PARSER ── */
+/* ================================================================
+   DETECTION HELPERS
+   ================================================================ */
+function isDivider(t){t=t.trim();return t.length>=3&&/^[\u2500-\u257F\u2014\u2015\u2012\u2013\u2E3A\u2E3B—–\-_=*]{3,}$/.test(t);}
+function isQuoted(t){t=t.trim();var a=t.charAt(0),z=t.charAt(t.length-1);return(a==='"'&&z==='"')||(a==='\u201C'&&(z==='\u201D'||z==='"'))||(a==='"'&&z==='\u201D');}
+function isAllBold(t){return/^\*\*[^*]+\*\*$/.test(t.trim());}
+var NOTE_WORDS=['materials','deck','source','current','formal','risk disclosure','takeaways','supports','describe','reference doc','from the'];
+function looksLikeNote(t){var l=t.toLowerCase();if(l.length<60)return false;var c=0;for(var i=0;i<NOTE_WORDS.length;i++)if(l.indexOf(NOTE_WORDS[i])!==-1)c++;return c>=2;}
+function isPairLabel(t){return/^(instead of|say|avoid|better|do not say|do say|wrong|right|before|after|old|new):?\s*$/i.test(t.trim());}
+
+/* ================================================================
+   MARKDOWN PARSER
+   ================================================================ */
 function parseMarkdown(raw){
   var t=raw.replace(/\r\n/g,'\n').replace(/\r/g,'\n').replace(/\n{3,}/g,'\n\n');
   var lines=t.split('\n'),blocks=[],i=0;
@@ -205,131 +191,81 @@ function parseMarkdown(raw){
     var tr=lines[i].trim();
     if(!tr){i++;continue;}
 
+    /* --- Dividers: skip entirely --- */
     if(isDivider(tr)){i++;continue;}
 
-    /* > Block quote → sticky line */
+    /* --- Block quote > --- */
     var bq=tr.match(/^>\s*(.*)/);
     if(bq){
-      var quoteText=bq[1].trim();
-      /* Collect continuation lines */
-      i++;
-      while(i<lines.length&&lines[i].trim()&&(lines[i].trim().charAt(0)==='>'||(!lines[i].trim().match(/^(#{1,6}\s|[\t ]*[-*\u2022]\s|[\t ]*\d+[.\)]\s|\*\*.+\*\*$|\|)/)&&lines[i].trim().length>0&&lines[i].trim().charAt(0)!=='#'))){
-        var contLine=lines[i].trim();
-        if(contLine.charAt(0)==='>') contLine=contLine.substring(1).trim();
-        quoteText+=' '+contLine;
-        i++;
+      var qt=bq[1].trim();i++;
+      while(i<lines.length&&lines[i].trim()&&(lines[i].trim().charAt(0)==='>'||(!lines[i].trim().match(/^(#{1,6}\s|[-*\u2022]\s|\d+[.\)]\s|\*\*.+\*\*$|\|)/)&&lines[i].trim().charAt(0)!=='#'))){
+        var cl=lines[i].trim();if(cl.charAt(0)==='>')cl=cl.substring(1).trim();qt+=' '+cl;i++;
       }
-      quoteText=quoteText.replace(/^[\u201C\u201D"]+|[\u201C\u201D"]+$/g,'').trim();
-      blocks.push({type:'sticky',text:cleanInline(quoteText),runs:[{t:cleanInline(quoteText),b:true}]});
-      continue;
+      qt=qt.replace(/^[\u201C\u201D"]+|[\u201C\u201D"]+$/g,'').trim();
+      blocks.push({type:'sticky',text:cleanInline(qt),runs:[{t:cleanInline(qt),b:true}]});continue;
     }
 
-    /* | Table detection → convert to paired text lines */
-    if(tr.charAt(0)==='|'||(tr.indexOf('|')>0&&tr.indexOf('|')<tr.length-1&&tr.split('|').length>=3)){
-      var headerRow=null;
-      var dataRows=[];
+    /* --- Pipe table | --- */
+    if(tr.charAt(0)==='|'||(tr.indexOf('|')>0&&tr.split('|').length>=3)){
+      var hdr=null,rows=[];
       while(i<lines.length&&lines[i].trim()&&lines[i].trim().indexOf('|')!==-1){
         var row=lines[i].trim();
-        if(!/^[\|\s\-:]+$/.test(row)){
-          var cells=row.split('|').map(function(c){return c.trim();}).filter(function(c){return c.length>0;});
-          if(cells.length>0){
-            if(!headerRow) headerRow=cells;
-            else dataRows.push(cells);
-          }
-        }
+        if(!/^[\|\s\-:]+$/.test(row)){var cells=row.split('|').map(function(c){return c.trim();}).filter(function(c){return c;});if(cells.length){if(!hdr)hdr=cells;else rows.push(cells);}}
         i++;
       }
-      /* Convert to paired text: "Header1: value1" / "Header2: value2" with spacing */
-      if(headerRow&&dataRows.length>0){
-        for(var r=0;r<dataRows.length;r++){
-          for(var c=0;c<headerRow.length&&c<dataRows[r].length;c++){
-            var label=cleanInline(headerRow[c]);
-            var value=cleanInline(dataRows[r][c]);
-            if(label&&value){
-              blocks.push({type:'tablepair',label:label,value:value});
-            }
-          }
-          /* Add a small gap between row groups */
-          if(r<dataRows.length-1) blocks.push({type:'tablegap'});
-        }
-      }
-      continue;
+      if(hdr&&rows.length){
+        for(var r=0;r<rows.length;r++){for(var c=0;c<hdr.length&&c<rows[r].length;c++){blocks.push({type:'tablepair',label:cleanInline(hdr[c]),value:cleanInline(rows[r][c])});}if(r<rows.length-1)blocks.push({type:'tablegap'});}
+      }continue;
     }
 
-    /* Malformed table detection — AvoidBetter or HeaderHeader pattern
-       Just split on quote marks and put each quoted piece on its own line */
-    var malTable=tr.match(/^([A-Z][a-z]+)([A-Z][a-z]+)([\u201C"'].+)$/);
-    if(malTable){
-      var h1=malTable[1], h2=malTable[2], rest=malTable[3];
-      /* Collect continuation lines */
-      i++;
-      while(i<lines.length&&lines[i].trim()&&!lines[i].trim().match(/^(#{1,6}\s|[-*\u2022]\s|\*\*.+\*\*$|>)/)){
-        rest+=' '+lines[i].trim();i++;
-      }
-      /* Extract all quoted strings */
-      var quoteRe=/[\u201C"']([^"\u201D\u2019]+?)[\u201D"']/g;
-      var quotes=[],qm;
-      while((qm=quoteRe.exec(rest))!==null) quotes.push(qm[1].trim());
-      if(quotes.length>=2){
-        /* Output header labels */
-        blocks.push({type:'subsection',text:h1+' / '+h2,runs:[{t:h1+' / '+h2,b:true}]});
-        /* Output pairs on alternating lines */
-        for(var q=0;q<quotes.length;q+=2){
-          if(q+1<quotes.length){
-            blocks.push({type:'key',text:quotes[q],runs:[{t:quotes[q],b:true}]});
-            blocks.push({type:'body',text:'\u2192 '+quotes[q+1],runs:[{t:'\u2192 '+quotes[q+1],b:false}]});
-          }
-        }
-        continue;
-      }
-      /* If parsing failed, fall through to normal processing */
+    /* --- Malformed table: TitleCaseTitleCase"..." --- */
+    var mal=tr.match(/^([A-Z][a-z]+)([A-Z][a-z]+)([\u201C"'].+)$/);
+    if(mal){
+      var h1=mal[1],h2=mal[2],rest=mal[3];i++;
+      while(i<lines.length&&lines[i].trim()&&!lines[i].trim().match(/^(#{1,6}\s|[-*\u2022]\s|\*\*.+\*\*$|>)/)){rest+=' '+lines[i].trim();i++;}
+      var qr=/[\u201C"']([^"\u201D\u2019]+?)[\u201D"']/g,qs=[],qm;
+      while((qm=qr.exec(rest))!==null)qs.push(qm[1].trim());
+      if(qs.length>=2){blocks.push({type:'subsection',text:h1+' / '+h2,runs:[{t:h1+' / '+h2,b:true}]});for(var q=0;q<qs.length;q+=2){if(q+1<qs.length){blocks.push({type:'key',text:qs[q],runs:[{t:qs[q],b:true}]});blocks.push({type:'body',text:'\u2192 '+qs[q+1],runs:[{t:'\u2192 '+qs[q+1],b:false}]});}}continue;}
       i--;
     }
 
-    /* # or ## heading → major section */
-    var h1=tr.match(/^#{1,2}\s+(.*)/);
-    if(h1){var tx=cleanInline(h1[1]);blocks.push({type:'section',text:tx,runs:[{t:tx,b:true}]});i++;continue;}
+    /* --- # or ## heading → section --- */
+    var h1m=tr.match(/^#{1,2}\s+(.*)/);
+    if(h1m){var tx=cleanInline(h1m[1]);blocks.push({type:'section',text:tx,runs:[{t:tx,b:true}]});i++;continue;}
 
-    /* ### heading → sub-section */
-    var h3=tr.match(/^#{3,6}\s+(.*)/);
-    if(h3){var tx=cleanInline(h3[1]);blocks.push({type:'subsection',text:tx,runs:[{t:tx,b:true}]});i++;continue;}
+    /* --- ### heading → sub-section --- */
+    var h3m=tr.match(/^#{3,6}\s+(.*)/);
+    if(h3m){var tx=cleanInline(h3m[1]);blocks.push({type:'subsection',text:tx,runs:[{t:tx,b:true}]});i++;continue;}
 
-    /* "Quoted line" → sticky/callout */
-    if(isQuoted(tr)){var cl=tr.replace(/^[\u201C\u201D"*]+|[\u201C\u201D"*]+$/g,'').trim();blocks.push({type:'sticky',text:cl,runs:[{t:cl,b:true}]});i++;continue;}
+    /* --- "Quoted line" → sticky --- */
+    if(isQuoted(tr)){var cl=tr.replace(/^[\u201C\u201D"*]+|[\u201C\u201D"*]+$/g,'').trim();blocks.push({type:'sticky',text:cleanInline(cl),runs:[{t:cleanInline(cl),b:true}]});i++;continue;}
 
-    /* **Bold-only line** → key statement */
+    /* --- **Bold-only line** → key statement --- */
     if(isAllBold(tr)&&tr.length<200){var tx=cleanInline(tr);blocks.push({type:'key',text:tx,runs:[{t:tx,b:true}]});i++;continue;}
 
-    /* Bullets */
+    /* --- Bullets --- */
     var buM=tr.match(/^[\t ]*[-*\u2022]\s+(.*)/);
     if(buM){blocks.push({type:'bullet',text:cleanInline(buM[1]),runs:parseRuns(buM[1])});i++;continue;}
 
-    /* Numbered list → bullet */
+    /* --- Numbered list → bullet --- */
     var nM=tr.match(/^[\t ]*\d+[.\)]\s+(.*)/);
     if(nM){blocks.push({type:'bullet',text:cleanInline(nM[1]),runs:parseRuns(nM[1])});i++;continue;}
 
-    /* Body paragraph — collect continuation lines */
+    /* --- Body paragraph --- */
     var para=tr;i++;
     while(i<lines.length&&lines[i].trim()&&!isDivider(lines[i].trim())&&!isQuoted(lines[i].trim())
-      &&!lines[i].trim().match(/^(#{1,6}\s|[\t ]*[-*\u2022]\s|[\t ]*\d+[.\)]\s|\*\*.+\*\*$)/)){
-      para+=' '+lines[i].trim();i++;
-    }
-
-    var cleaned=cleanInline(para);
-    var runs=parseRuns(para);
-
-    /* Detect note-style paragraphs (references to source materials) */
-    if(looksLikeNote(cleaned)){
-      blocks.push({type:'note',text:cleaned,runs:[{t:cleaned,b:false}]});
-    }else{
-      blocks.push({type:'body',text:cleaned,runs:runs});
-    }
+      &&!lines[i].trim().match(/^(#{1,6}\s|[\t ]*[-*\u2022]\s|[\t ]*\d+[.\)]\s|\*\*.+\*\*$|>\s|\|)/)
+    ){para+=' '+lines[i].trim();i++;}
+    var cleaned=cleanInline(para),runs=parseRuns(para);
+    if(looksLikeNote(cleaned))blocks.push({type:'note',text:cleaned,runs:[{t:cleaned,b:false}]});
+    else blocks.push({type:'body',text:cleaned,runs:runs});
   }
-
   return postProcess(blocks);
 }
 
-/* ── RICH HTML PARSER ── */
+/* ================================================================
+   RICH HTML PARSER
+   ================================================================ */
 function parseRichHTML(html){
   var temp=document.createElement('div');temp.innerHTML=html;
   var blocks=[],ch=temp.childNodes;
@@ -338,11 +274,17 @@ function parseRichHTML(html){
     if(node.nodeType===3&&!node.textContent.trim())continue;
     if(tag==='H1'||tag==='H2'){blocks.push({type:'section',text:node.textContent.trim(),runs:[{t:node.textContent.trim(),b:true}]});continue;}
     if(tag==='H3'||tag==='H4'){blocks.push({type:'subsection',text:node.textContent.trim(),runs:[{t:node.textContent.trim(),b:true}]});continue;}
-    if(tag==='UL'||tag==='OL'){var items=node.querySelectorAll('li');for(var j=0;j<items.length;j++)blocks.push({type:'bullet',text:items[j].textContent.trim(),runs:extractRuns(items[j])});continue;}
-    var runs=(node.nodeType===3)?[{t:node.textContent.trim(),b:false}]:extractRuns(node);
+    if(tag==='BLOCKQUOTE'){var qt=node.textContent.trim().replace(/^[\u201C\u201D"]+|[\u201C\u201D"]+$/g,'').trim();blocks.push({type:'sticky',text:qt,runs:[{t:qt,b:true}]});continue;}
+    if(tag==='UL'||tag==='OL'){var items=node.querySelectorAll('li');for(var j=0;j<items.length;j++)blocks.push({type:'bullet',text:items[j].textContent.trim(),runs:exRuns(items[j])});continue;}
+    if(tag==='TABLE'){
+      var trs=node.querySelectorAll('tr');var hdr=null;
+      for(var j=0;j<trs.length;j++){var cells=trs[j].querySelectorAll('th,td');var row=[];for(var k=0;k<cells.length;k++)row.push(cells[k].textContent.trim());if(!row.length)continue;if(!hdr){hdr=row;}else{for(var k=0;k<hdr.length&&k<row.length;k++)blocks.push({type:'tablepair',label:hdr[k],value:row[k]});if(j<trs.length-1)blocks.push({type:'tablegap'});}}
+      continue;
+    }
+    var runs=(node.nodeType===3)?[{t:node.textContent.trim(),b:false}]:exRuns(node);
     var full='';for(var k=0;k<runs.length;k++)full+=runs[k].t;full=full.trim();
     if(!full)continue;
-    if(isDivider(full)){blocks.push({type:'divider'});continue;}
+    if(isDivider(full))continue;
     if(isQuoted(full)){var cl=full.replace(/^[\u201C\u201D"]+|[\u201C\u201D"]+$/g,'').trim();blocks.push({type:'sticky',text:cl,runs:[{t:cl,b:true}]});continue;}
     var allBold=true;for(var k=0;k<runs.length;k++){if(runs[k].t.trim()&&!runs[k].b){allBold=false;break;}}
     if(allBold&&full.length<200)blocks.push({type:'key',text:full,runs:runs});
@@ -351,202 +293,171 @@ function parseRichHTML(html){
   }
   return postProcess(blocks);
 }
-function extractRuns(el){var runs=[];walkN(el,false,runs);var m=[];for(var i=0;i<runs.length;i++){if(m.length>0&&m[m.length-1].b===runs[i].b)m[m.length-1].t+=runs[i].t;else m.push({t:runs[i].t,b:runs[i].b});}return m;}
-function walkN(node,isBold,runs){
-  if(node.nodeType===3){if(node.textContent)runs.push({t:node.textContent,b:isBold});return;}
-  var tag=(node.tagName||'').toUpperCase();
-  var bold=isBold||tag==='B'||tag==='STRONG';
-  if(!bold&&node.style&&(node.style.fontWeight==='bold'||node.style.fontWeight==='700'))bold=true;
-  for(var i=0;i<node.childNodes.length;i++)walkN(node.childNodes[i],bold,runs);
+function exRuns(el){var r=[];wN(el,false,r);var m=[];for(var i=0;i<r.length;i++){if(m.length&&m[m.length-1].b===r[i].b)m[m.length-1].t+=r[i].t;else m.push({t:r[i].t,b:r[i].b});}return m;}
+function wN(n,bold,r){
+  if(n.nodeType===3){if(n.textContent)r.push({t:n.textContent,b:bold});return;}
+  var tag=(n.tagName||'').toUpperCase();var b=bold||tag==='B'||tag==='STRONG';
+  if(!b&&n.style&&(n.style.fontWeight==='bold'||n.style.fontWeight==='700'))b=true;
+  for(var i=0;i<n.childNodes.length;i++)wN(n.childNodes[i],b,r);
 }
 
-/* ── POST-PROCESSING ── */
+/* ================================================================
+   POST-PROCESSING (shared by both parsers)
+   ================================================================ */
 function postProcess(blocks){
-  /* Back-to-back sections → underline the first */
-  for(var j=0;j<blocks.length-1;j++){
-    if(blocks[j].type==='section'){
-      var nx=j+1;
-      while(nx<blocks.length&&blocks[nx].type==='divider')nx++;
-      if(nx<blocks.length&&(blocks[nx].type==='section'||blocks[nx].type==='subsection'))blocks[j].underline=true;
-    }
-  }
 
-  /* Auto-insert extra spacing before major sections after long content runs (no divider lines) */
-  var enhanced=[],sinceHead=0;
+  /* A. Strip footer artifacts */
+  while(blocks.length){var l=blocks[blocks.length-1];if(l.type==='body'&&/^\s*\d{2}\/\d{2}\/\d{2}\s+\d+\s+of\s+\d+/.test(l.text))blocks.pop();else break;}
+
+  /* B. Strip preamble before first heading */
+  var fh=-1;for(var j=0;j<blocks.length;j++){if(blocks[j].type==='section'||blocks[j].type==='subsection'){fh=j;break;}}
+  if(fh>0){var allShort=true;for(var j=0;j<fh;j++){if(blocks[j].type!=='body'&&blocks[j].type!=='key'){allShort=false;break;}if(blocks[j].text.length>120){allShort=false;break;}}if(allShort)blocks.splice(0,fh);}
+
+  /* C. Remove duplicate nested bullets */
+  var clean=[];
   for(var j=0;j<blocks.length;j++){
     var b=blocks[j];
-    if(b.type==='divider'){continue;} /* Skip all dividers */
-    if(b.type==='section'){if(sinceHead>=5&&j>0)b.extraSpace=true;sinceHead=0;}
-    else sinceHead++;
-    enhanced.push(b);
-  }
-  blocks=enhanced;
-
-  /* Remove duplicate title */
-  var tv=cleanTitle(titleInput.value.trim()).toLowerCase();
-  if(tv&&blocks.length>0){
-    for(var j=0;j<Math.min(3,blocks.length);j++){
-      var b=blocks[j];if(b.type==='divider')continue;
-      var bt=b.text.toLowerCase().replace(/[^a-z0-9\s]/g,'').trim();
-      var tt=tv.replace(/[^a-z0-9\s]/g,'').trim();
-      if(bt&&tt&&(bt.indexOf(tt)!==-1||tt.indexOf(bt)!==-1)){blocks.splice(j,1);break;}
+    if(b.type==='bullet'&&j+1<blocks.length&&blocks[j+1].type==='bullet'){
+      var tt=b.text.toLowerCase().replace(/[^a-z\s]/g,'');
+      var nxt=[];for(var k=j+1;k<Math.min(j+8,blocks.length)&&blocks[k].type==='bullet';k++)nxt.push(blocks[k].text.toLowerCase().replace(/[^a-z\s]/g,''));
+      if(nxt.length>=2){var mc=0;for(var k=0;k<nxt.length;k++)if(tt.indexOf(nxt[k])!==-1)mc++;if(mc>=2)continue;}
     }
+    clean.push(b);
   }
-  /* 5. Detect quick-reference / cheat sheet sections */
-  var CARD_WORDS=['quick-reference','quick reference','cheat sheet','reference card','reference version','best lines','best 10 lines','lines to keep','memory hooks'];
+  blocks=clean;
+
+  /* D. Detect "Instead of/Say" and similar label pairs */
+  var paired=[];
+  for(var j=0;j<blocks.length;j++){
+    var b=blocks[j];
+    if((b.type==='body'||b.type==='key')&&isPairLabel(b.text)&&j+1<blocks.length){
+      var val=blocks[j+1];
+      if(val&&(val.type==='key'||val.type==='body')){
+        var label=b.text.replace(/:?\s*$/,'').trim();
+        paired.push({type:'tablepair',label:label,value:val.text});
+        j++;continue;
+      }
+    }
+    paired.push(b);
+  }
+  blocks=paired;
+
+  /* E. Slide references → notes */
+  for(var j=0;j<blocks.length;j++){if(blocks[j].type==='section'&&/^slides?\s+\d/i.test(blocks[j].text)){blocks[j].type='note';blocks[j].runs=[{t:blocks[j].text,b:false}];}}
+
+  /* F. Long bold paragraphs → body with bold */
+  for(var j=0;j<blocks.length;j++){if(blocks[j].type==='key'&&blocks[j].text.length>200){blocks[j].type='body';blocks[j].runs=[{t:blocks[j].text,b:true}];}}
+
+  /* G. Back-to-back sections → underline first */
+  for(var j=0;j<blocks.length-1;j++){if(blocks[j].type==='section'){var nx=j+1;if(nx<blocks.length&&(blocks[nx].type==='section'||blocks[nx].type==='subsection'))blocks[j].underline=true;}}
+
+  /* H. Extra spacing before sections after long content */
+  var since=0;
+  for(var j=0;j<blocks.length;j++){if(blocks[j].type==='section'){if(since>=5)blocks[j].extraSpace=true;since=0;}else since++;}
+
+  /* I. Quick-reference card sections */
+  var CARD=['quick-reference','quick reference','cheat sheet','reference card','reference version','best lines','best 10 lines','lines to keep','memory hooks'];
   var inCard=false;
   for(var j=0;j<blocks.length;j++){
-    var b=blocks[j];
-    if(b.type==='section'){
-      var lt=b.text.toLowerCase();
-      var isCardStart=false;
-      for(var k=0;k<CARD_WORDS.length;k++){if(lt.indexOf(CARD_WORDS[k])!==-1){isCardStart=true;break;}}
-      if(isCardStart){inCard=true;b.cardSection=true;}
-      else{inCard=false;}
-    }
-    if(inCard) b.card=true;
+    if(blocks[j].type==='section'){var lt=blocks[j].text.toLowerCase();inCard=false;for(var k=0;k<CARD.length;k++)if(lt.indexOf(CARD[k])!==-1){inCard=true;break;}}
+    if(inCard)blocks[j].card=true;
   }
 
-  /* 6. Auto-detect column opportunities
-     Mark runs of short items that would benefit from 2-column layout */
+  /* J. Remove duplicate title from body */
+  var tv=cleanTitle(titleInput.value.trim()).toLowerCase();
+  if(tv){for(var j=0;j<Math.min(3,blocks.length);j++){var b=blocks[j];if(!b.text)continue;var bt=b.text.toLowerCase().replace(/[^a-z0-9\s]/g,'').trim();var tt=tv.replace(/[^a-z0-9\s]/g,'').trim();if(bt&&tt&&(bt.indexOf(tt)!==-1||tt.indexOf(bt)!==-1)){blocks.splice(j,1);break;}}}
+
+  /* K. Auto-column detection */
   for(var j=0;j<blocks.length;j++){
-    /* Find runs of short bullets */
+    /* Short bullets */
     if(blocks[j].type==='bullet'&&blocks[j].text.length<50){
-      var runStart=j, runEnd=j;
-      while(runEnd+1<blocks.length&&blocks[runEnd+1].type==='bullet'&&blocks[runEnd+1].text.length<50){runEnd++;}
-      var runLen=runEnd-runStart+1;
-      if(runLen>=4){
-        blocks[runStart].colStart=true;
-        blocks[runEnd].colEnd=true;
-        j=runEnd;continue;
-      }
+      var e=j;while(e+1<blocks.length&&blocks[e+1].type==='bullet'&&blocks[e+1].text.length<50)e++;
+      if(e-j>=3){blocks[j].colStart=true;blocks[e].colEnd=true;j=e;continue;}
     }
-    /* Find runs of short key statements */
+    /* Short key statements */
     if(blocks[j].type==='key'&&blocks[j].text.length<60){
-      var runStart=j, runEnd=j;
-      while(runEnd+1<blocks.length&&blocks[runEnd+1].type==='key'&&blocks[runEnd+1].text.length<60){runEnd++;}
-      var runLen=runEnd-runStart+1;
-      if(runLen>=4){
-        blocks[runStart].colStart=true;
-        blocks[runEnd].colEnd=true;
-        j=runEnd;continue;
-      }
+      var e=j;while(e+1<blocks.length&&blocks[e+1].type==='key'&&blocks[e+1].text.length<60)e++;
+      if(e-j>=3){blocks[j].colStart=true;blocks[e].colEnd=true;j=e;continue;}
     }
-    /* Find runs of tablepairs */
+    /* Table pairs */
     if(blocks[j].type==='tablepair'){
-      var runStart=j, runEnd=j;
-      while(runEnd+1<blocks.length&&(blocks[runEnd+1].type==='tablepair'||blocks[runEnd+1].type==='tablegap')){runEnd++;}
-      var pairCount=0;
-      for(var k=runStart;k<=runEnd;k++){if(blocks[k].type==='tablepair')pairCount++;}
-      if(pairCount>=4){
-        blocks[runStart].colStart=true;
-        blocks[runEnd].colEnd=true;
-        j=runEnd;continue;
-      }
+      var e=j;while(e+1<blocks.length&&(blocks[e+1].type==='tablepair'||blocks[e+1].type==='tablegap'))e++;
+      var pc=0;for(var k=j;k<=e;k++)if(blocks[k].type==='tablepair')pc++;
+      if(pc>=4){blocks[j].colStart=true;blocks[e].colEnd=true;j=e;continue;}
+    }
+    /* Short sticky lines */
+    if(blocks[j].type==='sticky'&&blocks[j].text.length<60){
+      var e=j;while(e+1<blocks.length&&blocks[e+1].type==='sticky'&&blocks[e+1].text.length<60)e++;
+      if(e-j>=3){blocks[j].colStart=true;blocks[e].colEnd=true;j=e;continue;}
     }
   }
 
   return blocks;
 }
 
-/* ── PREVIEW ── */
+/* ================================================================
+   PREVIEW
+   ================================================================ */
 function showPreview(){
-  var blocks=getBlocks();
-  var h='<b>Structure Preview:</b><br>';
+  var blocks=getBlocks(),h='<b>Structure Preview:</b><br>';
   for(var i=0;i<blocks.length;i++){
     var b=blocks[i],ul=b.underline?' style="text-decoration:underline"':'';
-    if(b.type==='section')h+='<div style="color:#60a5fa;font-weight:700;font-size:.95rem;margin-top:6px'+(b.card?';background:#1e3a5f;padding:2px 6px;border-radius:3px':'')+'"'+ul+'>SECTION: '+esc(b.text)+'</div>';
-    else if(b.type==='subsection')h+='<div style="color:#6d9eeb;font-weight:700;font-size:.88rem;padding-left:6px">SUB: '+esc(b.text)+'</div>';
-    else if(b.type==='key')h+='<div style="color:#93c5fd;font-weight:700">KEY: '+esc(b.text.substring(0,80))+(b.text.length>80?'\u2026':'')+'</div>';
-    else if(b.type==='sticky')h+='<div style="color:#818cf8;font-weight:700;padding-left:8px">\u275D '+esc(b.text.substring(0,80))+'</div>';
-    else if(b.type==='note')h+='<div style="color:#64748b;font-size:.75rem">NOTE: '+esc(b.text.substring(0,80))+(b.text.length>80?'\u2026':'')+'</div>';
-    else if(b.type==='divider')h+='<div style="color:#475569;font-size:.7rem">\u2500\u2500\u2500</div>';
-    else if(b.type==='table'){h+='<div style="font-size:.75rem;color:#64748b">TABLE: '+b.rows.length+' rows</div>';}
-    else if(b.type==='tablepair')h+='<div style="font-size:.8rem"><span style="color:#6d9eeb;font-weight:700">'+esc(b.label)+':</span> <span style="color:#93c5fd">'+esc(b.value)+'</span></div>';
-    else if(b.type==='tablegap')h+='<div style="height:4px"></div>';
-    else if(b.type==='bullet')h+='<div style="padding-left:16px">\u2022 '+esc(b.text.substring(0,80))+(b.text.length>80?'\u2026':'')+'</div>';
-    else h+='<div>'+esc(b.text.substring(0,90))+(b.text.length>90?'\u2026':'')+'</div>';
+    var bg=b.card?' background:#1e3a5f;padding:1px 4px;border-radius:2px;':'';
+    if(b.type==='section')h+='<div style="color:#60a5fa;font-weight:700;font-size:.95rem;margin-top:6px;'+bg+'"'+ul+'>'+esc(b.text)+'</div>';
+    else if(b.type==='subsection')h+='<div style="color:#6d9eeb;font-weight:700;font-size:.88rem;padding-left:6px;'+bg+'">'+esc(b.text)+'</div>';
+    else if(b.type==='key')h+='<div style="color:#93c5fd;font-weight:700;'+bg+'">'+esc(b.text.substring(0,80))+(b.text.length>80?'\u2026':'')+'</div>';
+    else if(b.type==='sticky')h+='<div style="color:#818cf8;font-weight:700;padding-left:8px;'+bg+'">\u275D '+esc(b.text.substring(0,70))+'</div>';
+    else if(b.type==='note')h+='<div style="color:#64748b;font-size:.75rem;'+bg+'">'+esc(b.text.substring(0,80))+(b.text.length>80?'\u2026':'')+'</div>';
+    else if(b.type==='tablepair')h+='<div style="font-size:.8rem;'+bg+'"><span style="color:#6d9eeb;font-weight:700">'+esc(b.label)+':</span> '+esc(b.value.substring(0,60))+'</div>';
+    else if(b.type==='tablegap'){}
+    else if(b.type==='bullet')h+='<div style="padding-left:16px;'+bg+'">'+(b.colStart?'\u25A5 ':'\u2022 ')+esc(b.text.substring(0,80))+(b.text.length>80?'\u2026':'')+'</div>';
+    else h+='<div style="'+bg+'">'+esc(b.text.substring(0,90))+(b.text.length>90?'\u2026':'')+'</div>';
   }
   previewBox.innerHTML=h;previewBox.style.display='block';
 }
 
-/* ── DOCX BUILDER ── */
-var TI=1440,BLUE='204C8D',DKBLUE='1a3a6b',ACCENT='4472C4',GRAY='555555',MG=Math.round(TI*0.5),HD=Math.round(TI*0.2),FD=Math.round(TI*0.2);
+/* ================================================================
+   DOCX BUILDER
+   ================================================================ */
+var TI=1440,BLUE='204C8D',DKBLUE='1a3a6b',ACCENT='4472C4',GRAY='555555',
+    MG=Math.round(TI*0.5),HD=Math.round(TI*0.2),FD=Math.round(TI*0.2);
 function hp(p){return p*2;}
 function tw(p){return p*20;}
-
 function mkRun(text,sz,color,bold,underline){
   return'<w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="'+hp(sz)+'"/><w:szCs w:val="'+hp(sz)+'"/><w:color w:val="'+color+'"/>'+(bold?'<w:b/><w:bCs/>':'')+(underline?'<w:u w:val="single" w:color="'+color+'"/>':'')+'</w:rPr><w:t xml:space="preserve">'+xmlEsc(text)+'</w:t></w:r>';
 }
-
-function mkRuns(runs,sz,color){
-  var x='';for(var i=0;i<runs.length;i++){var r=runs[i];x+=mkRun(r.t,sz,r.b?DKBLUE:color,r.b,false);}return x;
-}
+function mkRuns(runs,sz,color){var x='';for(var i=0;i<runs.length;i++){var r=runs[i];x+=mkRun(r.t,sz,r.b?DKBLUE:color,r.b,false);}return x;}
+function sectBreak(cols){return'<w:p><w:pPr><w:sectPr><w:type w:val="continuous"/><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="'+MG+'" w:right="'+MG+'" w:bottom="'+MG+'" w:left="'+MG+'" w:header="'+HD+'" w:footer="'+FD+'"/><w:cols w:num="'+cols+'"'+(cols>1?' w:space="288"':'')+'/></w:sectPr></w:pPr></w:p>';}
 
 function mkBody(blocks){
   var x='';
   for(var i=0;i<blocks.length;i++){
-    var b=blocks[i];
-    var shading=b.card?'<w:shd w:val="clear" w:color="auto" w:fill="E8EEF7"/>':'';
+    var b=blocks[i],sh=b.card?'<w:shd w:val="clear" w:color="auto" w:fill="E8EEF7"/>':'';
 
-    /* Insert continuous section break to START 2 columns */
-    if(b.colStart){
-      x+='<w:p><w:pPr><w:sectPr><w:type w:val="continuous"/><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="'+MG+'" w:right="'+MG+'" w:bottom="'+MG+'" w:left="'+MG+'" w:header="'+HD+'" w:footer="'+FD+'"/><w:cols w:num="2" w:space="288"/></w:sectPr></w:pPr></w:p>';
-    }
+    if(b.colStart)x+=sectBreak(2);
 
     if(b.type==='section'){
       var bf=i===0?'0':b.extraSpace?''+tw(16):''+tw(10);
-      var ul=b.underline||false;
-      x+='<w:p><w:pPr><w:pStyle w:val="Heading1"/><w:spacing w:before="'+bf+'" w:after="'+tw(3)+'" w:line="240" w:lineRule="auto"/>'+(b.card?'<w:shd w:val="clear" w:color="auto" w:fill="E8EEF7"/>':'')+'</w:pPr>'
-        +mkRun(b.text,15,BLUE,true,ul)+'</w:p>';
-
+      x+='<w:p><w:pPr><w:pStyle w:val="Heading1"/><w:spacing w:before="'+bf+'" w:after="'+tw(3)+'" w:line="240" w:lineRule="auto"/>'+sh+'</w:pPr>'+mkRun(b.text,15,BLUE,true,b.underline||false)+'</w:p>';
     }else if(b.type==='subsection'){
-      x+='<w:p><w:pPr><w:pStyle w:val="Heading2"/><w:spacing w:before="'+tw(7)+'" w:after="'+tw(2)+'" w:line="240" w:lineRule="auto"/>'+(b.card?'<w:shd w:val="clear" w:color="auto" w:fill="E8EEF7"/>':'')+'</w:pPr>'
-        +mkRun(b.text,13,ACCENT,true,false)+'</w:p>';
-
+      x+='<w:p><w:pPr><w:pStyle w:val="Heading2"/><w:spacing w:before="'+tw(7)+'" w:after="'+tw(2)+'" w:line="240" w:lineRule="auto"/>'+sh+'</w:pPr>'+mkRun(b.text,13,ACCENT,true,false)+'</w:p>';
     }else if(b.type==='key'){
-      x+='<w:p><w:pPr><w:spacing w:before="'+tw(2)+'" w:after="'+tw(2)+'" w:line="240" w:lineRule="auto"/>'+(b.card?'<w:shd w:val="clear" w:color="auto" w:fill="E8EEF7"/>':'')+'</w:pPr>'
-        +mkRun(b.text,13,DKBLUE,true,false)+'</w:p>';
-
+      x+='<w:p><w:pPr><w:spacing w:before="'+tw(2)+'" w:after="'+tw(2)+'" w:line="240" w:lineRule="auto"/>'+sh+'</w:pPr>'+mkRun(b.text,13,DKBLUE,true,false)+'</w:p>';
     }else if(b.type==='sticky'){
-      x+='<w:p><w:pPr><w:spacing w:before="'+tw(2)+'" w:after="'+tw(2)+'" w:line="240" w:lineRule="auto"/><w:ind w:left="288"/>'+(b.card?'<w:shd w:val="clear" w:color="auto" w:fill="E8EEF7"/>':'')+'</w:pPr>'
-        +mkRun(b.text,12,ACCENT,true,false)+'</w:p>';
-
+      x+='<w:p><w:pPr><w:spacing w:before="'+tw(2)+'" w:after="'+tw(2)+'" w:line="240" w:lineRule="auto"/><w:ind w:left="288"/>'+sh+'</w:pPr>'+mkRun(b.text,12,ACCENT,true,false)+'</w:p>';
     }else if(b.type==='note'){
-      x+='<w:p><w:pPr><w:spacing w:before="0" w:after="'+tw(3)+'" w:line="240" w:lineRule="auto"/>'+(b.card?'<w:shd w:val="clear" w:color="auto" w:fill="E8EEF7"/>':'')+'</w:pPr>'
-        +mkRun(b.text,11,GRAY,false,false)+'</w:p>';
-
+      x+='<w:p><w:pPr><w:spacing w:before="0" w:after="'+tw(3)+'" w:line="240" w:lineRule="auto"/>'+sh+'</w:pPr>'+mkRun(b.text,11,GRAY,false,false)+'</w:p>';
     }else if(b.type==='tablepair'){
-      /* Label: value pair — label in accent blue bold, value in dark navy */
-      x+='<w:p><w:pPr><w:spacing w:before="'+tw(1)+'" w:after="'+tw(1)+'" w:line="240" w:lineRule="auto"/>'+(b.card?'<w:shd w:val="clear" w:color="auto" w:fill="E8EEF7"/>':'')+'</w:pPr>'
-        +mkRun(b.label+':  ',11,ACCENT,true,false)
-        +mkRun(b.value,11,DKBLUE,false,false)+'</w:p>';
-
+      x+='<w:p><w:pPr><w:spacing w:before="'+tw(1)+'" w:after="'+tw(1)+'" w:line="240" w:lineRule="auto"/>'+sh+'</w:pPr>'+mkRun(b.label+':  ',11,ACCENT,true,false)+mkRun(b.value,11,DKBLUE,false,false)+'</w:p>';
     }else if(b.type==='tablegap'){
-      /* Small gap between table row groups */
-      x+='<w:p><w:pPr><w:spacing w:before="0" w:after="'+tw(3)+'" w:line="240" w:lineRule="auto"/>'+(b.card?'<w:shd w:val="clear" w:color="auto" w:fill="E8EEF7"/>':'')+'</w:pPr></w:p>';
-
+      x+='<w:p><w:pPr><w:spacing w:before="0" w:after="'+tw(3)+'" w:line="240" w:lineRule="auto"/>'+sh+'</w:pPr></w:p>';
     }else if(b.type==='bullet'){
-      x+='<w:p><w:pPr><w:pStyle w:val="ListBullet"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr><w:spacing w:before="0" w:after="'+tw(2)+'" w:line="240" w:lineRule="auto"/>'+(b.card?'<w:shd w:val="clear" w:color="auto" w:fill="E8EEF7"/>':'')+'</w:pPr>'
-        +mkRuns(b.runs,12,'000000')+'</w:p>';
-
-    }else if(b.type==='tablepair'){
-      x+='<w:p><w:pPr><w:spacing w:before="'+tw(1)+'" w:after="'+tw(1)+'" w:line="240" w:lineRule="auto"/>'+(b.card?'<w:shd w:val="clear" w:color="auto" w:fill="E8EEF7"/>':'')+'</w:pPr>'
-        +mkRun(b.label+':  ',11,ACCENT,true,false)
-        +mkRun(b.value,11,DKBLUE,false,false)+'</w:p>';
-
-    }else if(b.type==='tablegap'){
-      x+='<w:p><w:pPr><w:spacing w:before="0" w:after="'+tw(3)+'" w:line="240" w:lineRule="auto"/>'+(b.card?'<w:shd w:val="clear" w:color="auto" w:fill="E8EEF7"/>':'')+'</w:pPr></w:p>';
-
+      x+='<w:p><w:pPr><w:pStyle w:val="ListBullet"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr><w:spacing w:before="0" w:after="'+tw(2)+'" w:line="240" w:lineRule="auto"/>'+sh+'</w:pPr>'+mkRuns(b.runs,12,'000000')+'</w:p>';
     }else{
-      x+='<w:p><w:pPr><w:spacing w:before="0" w:after="'+tw(3)+'" w:line="240" w:lineRule="auto"/>'+(b.card?'<w:shd w:val="clear" w:color="auto" w:fill="E8EEF7"/>':'')+'</w:pPr>'
-        +mkRuns(b.runs,12,'000000')+'</w:p>';
+      x+='<w:p><w:pPr><w:spacing w:before="0" w:after="'+tw(3)+'" w:line="240" w:lineRule="auto"/>'+sh+'</w:pPr>'+mkRuns(b.runs,12,'000000')+'</w:p>';
     }
 
-    /* Insert continuous section break to END columns and go back to single column */
-    if(b.colEnd){
-      x+='<w:p><w:pPr><w:sectPr><w:type w:val="continuous"/><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="'+MG+'" w:right="'+MG+'" w:bottom="'+MG+'" w:left="'+MG+'" w:header="'+HD+'" w:footer="'+FD+'"/><w:cols w:num="1"/></w:sectPr></w:pPr></w:p>';
-    }
+    if(b.colEnd)x+=sectBreak(1);
   }
   return x;
 }
@@ -554,8 +465,7 @@ function mkBody(blocks){
 function mkHeader(title){
   var c=cleanTitle(title),lines=splitTitle(c);
   var x='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">';
-  for(var i=0;i<lines.length;i++)
-    x+='<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr>'+mkRun(lines[i],14,BLUE,false,false)+'</w:p>';
+  for(var i=0;i<lines.length;i++)x+='<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr>'+mkRun(lines[i],14,BLUE,false,false)+'</w:p>';
   x+='<w:p><w:pPr><w:spacing w:after="'+tw(4)+'" w:line="240" w:lineRule="auto"/><w:rPr><w:sz w:val="'+hp(1)+'"/></w:rPr></w:pPr></w:p></w:hdr>';
   return x;
 }
@@ -571,8 +481,8 @@ function buildDocx(title,blocks){
   z.file('word/header1.xml',mkHeader(title));
   var now=new Date(),ds=String(now.getMonth()+1).padStart(2,'0')+'/'+String(now.getDate()).padStart(2,'0')+'/'+String(now.getFullYear()).slice(-2);
   z.file('word/footer1.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:pPr><w:tabs><w:tab w:val="right" w:pos="'+(12240-MG*2)+'"/></w:tabs></w:pPr>'+mkRun(ds,9,GRAY,false,false)+'<w:r><w:tab/></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="'+hp(9)+'"/><w:szCs w:val="'+hp(9)+'"/><w:color w:val="'+GRAY+'"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="'+hp(9)+'"/><w:szCs w:val="'+hp(9)+'"/><w:color w:val="'+GRAY+'"/></w:rPr><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="'+hp(9)+'"/><w:szCs w:val="'+hp(9)+'"/><w:color w:val="'+GRAY+'"/></w:rPr><w:fldChar w:fldCharType="end"/></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="'+hp(9)+'"/><w:szCs w:val="'+hp(9)+'"/><w:color w:val="'+GRAY+'"/></w:rPr><w:t xml:space="preserve"> of </w:t></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="'+hp(9)+'"/><w:szCs w:val="'+hp(9)+'"/><w:color w:val="'+GRAY+'"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="'+hp(9)+'"/><w:szCs w:val="'+hp(9)+'"/><w:color w:val="'+GRAY+'"/></w:rPr><w:instrText xml:space="preserve"> NUMPAGES </w:instrText></w:r><w:r><w:rPr><w:rFonts w:ascii="Lexend" w:hAnsi="Lexend" w:cs="Lexend"/><w:sz w:val="'+hp(9)+'"/><w:szCs w:val="'+hp(9)+'"/><w:color w:val="'+GRAY+'"/></w:rPr><w:fldChar w:fldCharType="end"/></w:r></w:p></w:ftr>');
-  var bodyXml=mkBody(blocks);
-  z.file('word/document.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>'+bodyXml+'<w:sectPr><w:headerReference w:type="default" r:id="rId3"/><w:footerReference w:type="default" r:id="rId4"/><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="'+MG+'" w:right="'+MG+'" w:bottom="'+MG+'" w:left="'+MG+'" w:header="'+HD+'" w:footer="'+FD+'"/></w:sectPr></w:body></w:document>');
+  var body=mkBody(blocks);
+  z.file('word/document.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>'+body+'<w:sectPr><w:headerReference w:type="default" r:id="rId3"/><w:footerReference w:type="default" r:id="rId4"/><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="'+MG+'" w:right="'+MG+'" w:bottom="'+MG+'" w:left="'+MG+'" w:header="'+HD+'" w:footer="'+FD+'"/></w:sectPr></w:body></w:document>');
   return z.generateAsync({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
 }
 </script>
