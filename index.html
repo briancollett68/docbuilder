@@ -38,7 +38,7 @@ button{padding:14px 28px;font-family:'Lexend',sans-serif;font-size:1rem;font-wei
 </head>
 <body>
 <h1>ChatGPT &#8594; Word Document</h1>
-<p class="subtitle">Paste ChatGPT output or formatted text. <span style="color:#64748b;font-size:.8rem">BUILD 44 &middot; docx.js engine</span></p>
+<p class="subtitle">Paste ChatGPT output or formatted text. <span style="color:#64748b;font-size:.8rem">BUILD 46</span></p>
 <div class="container">
   <div class="top-bar">
     <div>
@@ -388,6 +388,14 @@ var CARD_FILL='E8EEF7';
 var MG=720,HD=288,FD=288;   /* 0.5" margins, 0.2" header/footer distance */
 var PW=12240,PH=15840;      /* US Letter */
 
+/* ---- 2-column list settings (whitespace saver) ----
+   A run of this many+ consecutive bullets, each <= COL_ITEM_MAXLEN chars,
+   is rendered as a borderless 2-column table (fills top-to-bottom down the
+   left column first). Long/sentence bullets stay single-column. Set
+   COL_MIN_ITEMS very high (e.g. 999) to disable columns entirely. */
+var COL_MIN_ITEMS=4;
+var COL_ITEM_MAXLEN=45;
+
 /* ---- Unit helpers ---- */
 function pt(n){return n*2;}   /* points -> half-points (font size)  */
 function tw(n){return n*20;}  /* points -> twips (spacing)          */
@@ -433,6 +441,46 @@ function blockToPara(b,index){
   return new D.Paragraph(o);
 }
 
+/* ---- 2-column bullet table (borderless, tight) ---- */
+function noBorders(){
+  var none={style:D.BorderStyle.NONE,size:0,color:'FFFFFF'};
+  return {top:none,bottom:none,left:none,right:none,insideHorizontal:none,insideVertical:none};
+}
+function bulletCell(item,w){
+  var kids=item
+    ?[new D.Paragraph({children:runsToTextRuns(item.runs,12,BLACK),numbering:{reference:'bl',level:0},spacing:sp(0,tw(1))})]
+    :[new D.Paragraph({children:[new D.TextRun({text:'',font:FONT,size:pt(12)})],spacing:sp(0,0)})];
+  return new D.TableCell({width:{size:w,type:D.WidthType.DXA},margins:{top:0,bottom:0,left:tw(2),right:tw(4)},borders:noBorders(),children:kids});
+}
+function bulletColumns(items){
+  var n=items.length,half=Math.ceil(n/2),COLW=Math.floor((PW-MG*2)/2),rows=[];
+  for(var r=0;r<half;r++){
+    rows.push(new D.TableRow({cantSplit:true,children:[bulletCell(items[r],COLW),bulletCell(items[half+r],COLW)]}));
+  }
+  return new D.Table({width:{size:PW-MG*2,type:D.WidthType.DXA},columnWidths:[COLW,COLW],borders:noBorders(),rows:rows});
+}
+
+/* ---- Blocks -> children, grouping qualifying bullet runs into 2 columns ---- */
+function buildChildren(blocks){
+  var out=[],i=0;
+  while(i<blocks.length){
+    if(blocks[i].type==='bullet'){
+      var j=i;while(j<blocks.length&&blocks[j].type==='bullet')j++;
+      var group=blocks.slice(i,j),shortEnough=true;
+      for(var g=0;g<group.length;g++){if((group[g].text||'').length>COL_ITEM_MAXLEN){shortEnough=false;break;}}
+      if(group.length>=COL_MIN_ITEMS&&shortEnough){
+        out.push(bulletColumns(group));
+      }else{
+        for(var k=0;k<group.length;k++)out.push(blockToPara(group[k],i+k));
+      }
+      i=j;
+    }else{
+      out.push(blockToPara(blocks[i],i));i++;
+    }
+  }
+  return out;
+}
+
 /* ---- Header: title split across centered lines ---- */
 function buildHeader(title){
   var lines=splitTitle(cleanTitle(title)),kids=[];
@@ -456,8 +504,7 @@ function buildFooter(){
 
 /* ---- Assemble + pack ---- */
 function buildDocx(title,blocks){
-  var children=[];
-  for(var i=0;i<blocks.length;i++)children.push(blockToPara(blocks[i],i));
+  var children=buildChildren(blocks);
   var doc=new D.Document({
     creator:'ISQ Doc Builder',
     title:cleanTitle(title),
