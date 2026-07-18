@@ -11,6 +11,7 @@ body{font-family:'Lexend',sans-serif;background:#0f172a;color:#e2e8f0;min-height
 h1{font-size:1.6rem;color:#93c5fd;margin-bottom:4px;text-align:center}
 .subtitle{color:#64748b;font-size:.85rem;margin-bottom:20px;text-align:center}
 .container{width:100%;max-width:800px;display:flex;flex-direction:column;gap:16px}
+.top-bar{position:sticky;top:0;z-index:10;background:#0f172a;padding:12px 0 8px 0;display:flex;flex-direction:column;gap:12px;border-bottom:1px solid #1e293b}
 label{font-size:.85rem;color:#94a3b8;font-weight:700}
 #textInput{width:100%;min-height:340px;background:#1e293b;border:1px solid #334155;border-radius:10px;color:#e2e8f0;font-family:'Lexend',sans-serif;font-size:.9rem;padding:14px;outline:none;transition:border .2s;overflow-y:auto;white-space:pre-wrap;word-wrap:break-word}
 #textInput:focus{border-color:#3b82f6}
@@ -67,6 +68,19 @@ var previewBox=document.getElementById('previewBox');
 var charCount=document.getElementById('charCount');
 var titlePreview=document.getElementById('titlePreview');
 var debounceTimer=null;
+
+/* Clear button */
+document.getElementById('clearBtn').addEventListener('click',function(){
+  textInput.innerHTML='';
+  titleInput.value='';
+  charCount.textContent='0 chars';
+  titlePreview.style.display='none';
+  previewBox.style.display='none';
+  statusEl.textContent='';
+  statusEl.className='status';
+  checkReady();
+  titleInput.focus();
+});
 
 textInput.addEventListener('input',function(){
   checkReady();
@@ -361,6 +375,8 @@ function walkN(node,isBold,runs){
 
 /* ── POST-PROCESSING ── */
 function postProcess(blocks){
+  if(!blocks||!blocks.length)return blocks||[];
+  try{
   /* Back-to-back sections → underline the first */
   for(var j=0;j<blocks.length-1;j++){
     if(blocks[j].type==='section'){
@@ -391,8 +407,7 @@ function postProcess(blocks){
       if(bt&&tt&&(bt.indexOf(tt)!==-1||tt.indexOf(bt)!==-1)){blocks.splice(j,1);break;}
     }
   }
-  /* 5. Detect quick-reference / cheat sheet sections
-     Mark all blocks from that section heading to the next major section as 'card' */
+  /* 5. Detect quick-reference / cheat sheet sections */
   var CARD_WORDS=['quick-reference','quick reference','cheat sheet','reference card','reference version','best lines','best 10 lines','lines to keep','memory hooks'];
   var inCard=false;
   for(var j=0;j<blocks.length;j++){
@@ -407,7 +422,47 @@ function postProcess(blocks){
     if(inCard) b.card=true;
   }
 
+  /* 6. Auto-detect column opportunities
+     Mark runs of short items that would benefit from 2-column layout */
+  for(var j=0;j<blocks.length;j++){
+    /* Find runs of short bullets */
+    if(blocks[j].type==='bullet'&&blocks[j].text.length<50){
+      var runStart=j, runEnd=j;
+      while(runEnd+1<blocks.length&&blocks[runEnd+1].type==='bullet'&&blocks[runEnd+1].text.length<50){runEnd++;}
+      var runLen=runEnd-runStart+1;
+      if(runLen>=4){
+        blocks[runStart].colStart=true;
+        blocks[runEnd].colEnd=true;
+        j=runEnd;continue;
+      }
+    }
+    /* Find runs of short key statements */
+    if(blocks[j].type==='key'&&blocks[j].text.length<60){
+      var runStart=j, runEnd=j;
+      while(runEnd+1<blocks.length&&blocks[runEnd+1].type==='key'&&blocks[runEnd+1].text.length<60){runEnd++;}
+      var runLen=runEnd-runStart+1;
+      if(runLen>=4){
+        blocks[runStart].colStart=true;
+        blocks[runEnd].colEnd=true;
+        j=runEnd;continue;
+      }
+    }
+    /* Find runs of tablepairs */
+    if(blocks[j].type==='tablepair'){
+      var runStart=j, runEnd=j;
+      while(runEnd+1<blocks.length&&(blocks[runEnd+1].type==='tablepair'||blocks[runEnd+1].type==='tablegap')){runEnd++;}
+      var pairCount=0;
+      for(var k=runStart;k<=runEnd;k++){if(blocks[k].type==='tablepair')pairCount++;}
+      if(pairCount>=4){
+        blocks[runStart].colStart=true;
+        blocks[runEnd].colEnd=true;
+        j=runEnd;continue;
+      }
+    }
+  }
+
   return blocks;
+  }catch(e){console.error('Post-process error:',e);return blocks||[];}
 }
 
 /* ── PREVIEW ── */
@@ -448,9 +503,12 @@ function mkBody(blocks){
   var x='';
   for(var i=0;i<blocks.length;i++){
     var b=blocks[i];
-    /* Card sections get light blue shading on every paragraph */
     var shading=b.card?'<w:shd w:val="clear" w:color="auto" w:fill="E8EEF7"/>':'';
-    var pShading=b.card?'<w:pPr><w:shd w:val="clear" w:color="auto" w:fill="E8EEF7"/></w:pPr>':'';
+
+    /* Insert continuous section break to START 2 columns */
+    if(b.colStart){
+      x+='<w:p><w:pPr><w:sectPr><w:type w:val="continuous"/><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="'+MG+'" w:right="'+MG+'" w:bottom="'+MG+'" w:left="'+MG+'" w:header="'+HD+'" w:footer="'+FD+'"/><w:cols w:num="2" w:space="288"/></w:sectPr></w:pPr></w:p>';
+    }
 
     if(b.type==='section'){
       var bf=i===0?'0':b.extraSpace?''+tw(16):''+tw(10);
@@ -499,6 +557,11 @@ function mkBody(blocks){
     }else{
       x+='<w:p><w:pPr><w:spacing w:before="0" w:after="'+tw(3)+'" w:line="240" w:lineRule="auto"/>'+(b.card?'<w:shd w:val="clear" w:color="auto" w:fill="E8EEF7"/>':'')+'</w:pPr>'
         +mkRuns(b.runs,12,'000000')+'</w:p>';
+    }
+
+    /* Insert continuous section break to END columns and go back to single column */
+    if(b.colEnd){
+      x+='<w:p><w:pPr><w:sectPr><w:type w:val="continuous"/><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="'+MG+'" w:right="'+MG+'" w:bottom="'+MG+'" w:left="'+MG+'" w:header="'+HD+'" w:footer="'+FD+'"/><w:cols w:num="1"/></w:sectPr></w:pPr></w:p>';
     }
   }
   return x;
