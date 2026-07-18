@@ -133,6 +133,20 @@ function detectTitle(text){
   return '';
 }
 
+/* Update the title preview display */
+function updateTitlePreview(){
+  var v=titleInput.value.trim();
+  if(v){
+    var lines=splitTitle(cleanTitle(v));
+    var h='<span>Header preview:</span>';
+    for(var i=0;i<lines.length;i++) h+='<div>'+esc(lines[i])+'</div>';
+    titlePreview.innerHTML=h;
+    titlePreview.style.display='block';
+  } else {
+    titlePreview.style.display='none';
+  }
+}
+
 function getBlocks(){
   var html=textInput.innerHTML,text=getText();
   var hasMd=/\*\*[^*]+\*\*/.test(text)||/^#{1,6}\s/m.test(text);
