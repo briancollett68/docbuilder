@@ -425,7 +425,7 @@ function blockToPara(b,index){
   }else if(b.type==='tablegap'){
     o={children:[],spacing:sp(0,tw(3))};
   }else if(b.type==='bullet'){
-    o={children:runsToTextRuns(b.runs,12,BLACK),bullet:{level:0},spacing:sp(0,tw(2))};
+    o={children:runsToTextRuns(b.runs,12,BLACK),numbering:{reference:'bl',level:0},spacing:sp(0,tw(2))};
   }else{
     o={children:runsToTextRuns(b.runs,12,BLACK),spacing:sp(0,tw(3))};
   }
@@ -462,6 +462,7 @@ function buildDocx(title,blocks){
     creator:'ISQ Doc Builder',
     title:cleanTitle(title),
     styles:{default:{document:{run:{font:FONT,size:pt(12),color:BLACK}}}},
+    numbering:{config:[{reference:'bl',levels:[{level:0,format:D.LevelFormat.BULLET,text:'\uF0B7',alignment:D.AlignmentType.LEFT,style:{run:{font:'Symbol'},paragraph:{indent:{left:432,hanging:216}}}}]}]},
     sections:[{
       properties:{page:{size:{width:PW,height:PH},margin:{top:MG,right:MG,bottom:MG,left:MG,header:HD,footer:FD}}},
       headers:{default:buildHeader(title)},
