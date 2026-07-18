@@ -11,6 +11,7 @@ body{font-family:'Lexend',sans-serif;background:#0f172a;color:#e2e8f0;min-height
 h1{font-size:1.6rem;color:#93c5fd;margin-bottom:4px;text-align:center}
 .subtitle{color:#64748b;font-size:.85rem;margin-bottom:20px;text-align:center}
 .container{width:100%;max-width:800px;display:flex;flex-direction:column;gap:16px}
+.top-bar{position:sticky;top:0;z-index:10;background:#0f172a;padding:12px 0 8px 0;display:flex;flex-direction:column;gap:12px;border-bottom:1px solid #1e293b}
 label{font-size:.85rem;color:#94a3b8;font-weight:700}
 #textInput{width:100%;min-height:340px;background:#1e293b;border:1px solid #334155;border-radius:10px;color:#e2e8f0;font-family:'Lexend',sans-serif;font-size:.9rem;padding:14px;outline:none;transition:border .2s;overflow-y:auto;white-space:pre-wrap;word-wrap:break-word}
 #textInput:focus{border-color:#3b82f6}
@@ -36,7 +37,7 @@ button{padding:14px 28px;font-family:'Lexend',sans-serif;font-size:1rem;font-wei
 </head>
 <body>
 <h1>ChatGPT &#8594; Word Document</h1>
-<p class="subtitle">Paste ChatGPT output or formatted text below. <span style="color:#334155">v3.5</span></p>
+<p class="subtitle">Paste ChatGPT output or formatted text below. <span style="color:#334155">v3.9</span></p>
 <div class="container">
   <div>
     <label>Document Title (used in header)</label>
@@ -108,6 +109,16 @@ function checkReady(){buildBtn.disabled=!(getText().trim().length>0&&titleInput.
 function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function xmlEsc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function cleanTitle(t){return t.replace(/^#{1,6}\s*/,'').replace(/\*\*/g,'').replace(/[*_`]/g,'').trim();}
+
+/* Auto-detect title — just use the first non-empty line */
+function detectTitle(text){
+  var lines=text.split(/\n/);
+  for(var i=0;i<lines.length;i++){
+    var tr=lines[i].trim();
+    if(tr) return cleanTitle(tr);
+  }
+  return '';
+}
 
 function getBlocks(){
   var html=textInput.innerHTML,text=getText();
@@ -245,28 +256,33 @@ function parseMarkdown(raw){
       continue;
     }
 
-    /* Malformed table detection — AvoidBetter or HeaderHeader pattern */
+    /* Malformed table detection — AvoidBetter or HeaderHeader pattern
+       Just split on quote marks and put each quoted piece on its own line */
     var malTable=tr.match(/^([A-Z][a-z]+)([A-Z][a-z]+)([\u201C"'].+)$/);
     if(malTable){
       var h1=malTable[1], h2=malTable[2], rest=malTable[3];
-      var quoteRe=/[\u201C"']([^"\u201D\u2019]*?)[\u201D"']/g;
-      var quotes=[],qm;
-      var fullText=rest;
+      /* Collect continuation lines */
       i++;
       while(i<lines.length&&lines[i].trim()&&!lines[i].trim().match(/^(#{1,6}\s|[-*\u2022]\s|\*\*.+\*\*$|>)/)){
-        fullText+=' '+lines[i].trim();i++;
+        rest+=' '+lines[i].trim();i++;
       }
-      while((qm=quoteRe.exec(fullText))!==null) quotes.push(qm[1]);
+      /* Extract all quoted strings */
+      var quoteRe=/[\u201C"']([^"\u201D\u2019]+?)[\u201D"']/g;
+      var quotes=[],qm;
+      while((qm=quoteRe.exec(rest))!==null) quotes.push(qm[1].trim());
       if(quotes.length>=2){
+        /* Output header labels */
+        blocks.push({type:'subsection',text:h1+' / '+h2,runs:[{t:h1+' / '+h2,b:true}]});
+        /* Output pairs on alternating lines */
         for(var q=0;q<quotes.length;q+=2){
           if(q+1<quotes.length){
-            blocks.push({type:'tablepair',label:h1,value:cleanInline(quotes[q])});
-            blocks.push({type:'tablepair',label:h2,value:cleanInline(quotes[q+1])});
-            if(q+2<quotes.length-1) blocks.push({type:'tablegap'});
+            blocks.push({type:'key',text:quotes[q],runs:[{t:quotes[q],b:true}]});
+            blocks.push({type:'body',text:'\u2192 '+quotes[q+1],runs:[{t:'\u2192 '+quotes[q+1],b:false}]});
           }
         }
         continue;
       }
+      /* If parsing failed, fall through to normal processing */
       i--;
     }
 
@@ -376,8 +392,7 @@ function postProcess(blocks){
       if(bt&&tt&&(bt.indexOf(tt)!==-1||tt.indexOf(bt)!==-1)){blocks.splice(j,1);break;}
     }
   }
-  /* 5. Detect quick-reference / cheat sheet sections
-     Mark all blocks from that section heading to the next major section as 'card' */
+  /* 5. Detect quick-reference / cheat sheet sections */
   var CARD_WORDS=['quick-reference','quick reference','cheat sheet','reference card','reference version','best lines','best 10 lines','lines to keep','memory hooks'];
   var inCard=false;
   for(var j=0;j<blocks.length;j++){
@@ -390,6 +405,45 @@ function postProcess(blocks){
       else{inCard=false;}
     }
     if(inCard) b.card=true;
+  }
+
+  /* 6. Auto-detect column opportunities
+     Mark runs of short items that would benefit from 2-column layout */
+  for(var j=0;j<blocks.length;j++){
+    /* Find runs of short bullets */
+    if(blocks[j].type==='bullet'&&blocks[j].text.length<50){
+      var runStart=j, runEnd=j;
+      while(runEnd+1<blocks.length&&blocks[runEnd+1].type==='bullet'&&blocks[runEnd+1].text.length<50){runEnd++;}
+      var runLen=runEnd-runStart+1;
+      if(runLen>=4){
+        blocks[runStart].colStart=true;
+        blocks[runEnd].colEnd=true;
+        j=runEnd;continue;
+      }
+    }
+    /* Find runs of short key statements */
+    if(blocks[j].type==='key'&&blocks[j].text.length<60){
+      var runStart=j, runEnd=j;
+      while(runEnd+1<blocks.length&&blocks[runEnd+1].type==='key'&&blocks[runEnd+1].text.length<60){runEnd++;}
+      var runLen=runEnd-runStart+1;
+      if(runLen>=4){
+        blocks[runStart].colStart=true;
+        blocks[runEnd].colEnd=true;
+        j=runEnd;continue;
+      }
+    }
+    /* Find runs of tablepairs */
+    if(blocks[j].type==='tablepair'){
+      var runStart=j, runEnd=j;
+      while(runEnd+1<blocks.length&&(blocks[runEnd+1].type==='tablepair'||blocks[runEnd+1].type==='tablegap')){runEnd++;}
+      var pairCount=0;
+      for(var k=runStart;k<=runEnd;k++){if(blocks[k].type==='tablepair')pairCount++;}
+      if(pairCount>=4){
+        blocks[runStart].colStart=true;
+        blocks[runEnd].colEnd=true;
+        j=runEnd;continue;
+      }
+    }
   }
 
   return blocks;
@@ -433,9 +487,12 @@ function mkBody(blocks){
   var x='';
   for(var i=0;i<blocks.length;i++){
     var b=blocks[i];
-    /* Card sections get light blue shading on every paragraph */
     var shading=b.card?'<w:shd w:val="clear" w:color="auto" w:fill="E8EEF7"/>':'';
-    var pShading=b.card?'<w:pPr><w:shd w:val="clear" w:color="auto" w:fill="E8EEF7"/></w:pPr>':'';
+
+    /* Insert continuous section break to START 2 columns */
+    if(b.colStart){
+      x+='<w:p><w:pPr><w:sectPr><w:type w:val="continuous"/><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="'+MG+'" w:right="'+MG+'" w:bottom="'+MG+'" w:left="'+MG+'" w:header="'+HD+'" w:footer="'+FD+'"/><w:cols w:num="2" w:space="288"/></w:sectPr></w:pPr></w:p>';
+    }
 
     if(b.type==='section'){
       var bf=i===0?'0':b.extraSpace?''+tw(16):''+tw(10);
@@ -484,6 +541,11 @@ function mkBody(blocks){
     }else{
       x+='<w:p><w:pPr><w:spacing w:before="0" w:after="'+tw(3)+'" w:line="240" w:lineRule="auto"/>'+(b.card?'<w:shd w:val="clear" w:color="auto" w:fill="E8EEF7"/>':'')+'</w:pPr>'
         +mkRuns(b.runs,12,'000000')+'</w:p>';
+    }
+
+    /* Insert continuous section break to END columns and go back to single column */
+    if(b.colEnd){
+      x+='<w:p><w:pPr><w:sectPr><w:type w:val="continuous"/><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="'+MG+'" w:right="'+MG+'" w:bottom="'+MG+'" w:left="'+MG+'" w:header="'+HD+'" w:footer="'+FD+'"/><w:cols w:num="1"/></w:sectPr></w:pPr></w:p>';
     }
   }
   return x;
