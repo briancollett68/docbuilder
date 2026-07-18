@@ -38,7 +38,7 @@ button{padding:14px 28px;font-family:'Lexend',sans-serif;font-size:1rem;font-wei
 </head>
 <body>
 <h1>ChatGPT &#8594; Word Document</h1>
-<p class="subtitle">Paste ChatGPT output or formatted text. <span style="color:#64748b;font-size:.8rem">BUILD 42</span></p>
+<p class="subtitle">Paste ChatGPT output or formatted text. <span style="color:#64748b;font-size:.8rem">BUILD 43</span></p>
 <div class="container">
   <div class="top-bar">
     <div>
@@ -100,8 +100,10 @@ textInput.addEventListener('paste',function(e){
         var d=detectTitle(clipText||t);
         if(d){titleInput.value=d;charCount.textContent=d.length+' chars';updateTitlePreview();checkReady();}
       }
-      titleInput.scrollIntoView({behavior:'smooth',block:'start'});
     }
+    /* Scroll to top after browser finishes rendering */
+    setTimeout(function(){window.scrollTo({top:0,behavior:'smooth'});},100);
+    setTimeout(function(){window.scrollTo({top:0,behavior:'smooth'});},400);
   },200);
 });
 
