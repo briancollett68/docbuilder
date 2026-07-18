@@ -38,7 +38,7 @@ button{padding:14px 28px;font-family:'Lexend',sans-serif;font-size:1rem;font-wei
 </head>
 <body>
 <h1>ChatGPT &#8594; Word Document</h1>
-<p class="subtitle">Paste ChatGPT output or formatted text. <span style="color:#64748b;font-size:.8rem">BUILD 46</span></p>
+<p class="subtitle">Paste ChatGPT output or formatted text. <span style="color:#64748b;font-size:.8rem">BUILD 47</span></p>
 <div class="container">
   <div class="top-bar">
     <div>
@@ -508,6 +508,9 @@ function buildDocx(title,blocks){
   var doc=new D.Document({
     creator:'ISQ Doc Builder',
     title:cleanTitle(title),
+    /* Drop a paragraph's "space before" when it lands at the top of a page
+       after a break — removes the stray blank line some pages showed in Word. */
+    compatibility:{suppressSpacingAtTopOfPage:true,suppressSpBfAfterPgBrk:true},
     styles:{default:{document:{run:{font:FONT,size:pt(12),color:BLACK}}}},
     numbering:{config:[{reference:'bl',levels:[{level:0,format:D.LevelFormat.BULLET,text:'\uF0B7',alignment:D.AlignmentType.LEFT,style:{run:{font:'Symbol'},paragraph:{indent:{left:432,hanging:216}}}}]}]},
     sections:[{
